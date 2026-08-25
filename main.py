@@ -1,14 +1,13 @@
 import torch
 from environment import TicTacToeEnv
 from agent import LocalLLMAgent
-from self_play import collect_self_play_trajectory
+from self_play import collect_batched_self_play_trajectories
 from storage import TrajectoryStorage
 from trainer import TRLTrainer
 
 def main():
     print("=== Walking Skeleton: Continual RL with Self-Play (TRL Integration) ===")
-    print("Initializing environment (Tic-Tac-Toe)...")
-    env = TicTacToeEnv()
+    # env initialization is now handled dynamically in self_play.py for vectorized rollouts
     
     # We use a small local model for the walking skeleton. 
     # Qwen 3.6 can be dropped-in here later.
@@ -25,19 +24,19 @@ def main():
     storage = TrajectoryStorage(base_dir="latents")
     
     num_iterations = 100 # Overall training loops
-    episodes_per_iteration = 10 # Collect 10 games before trying to train
+    # 32 concurrent games running in parallel (saturating the GPU)
+    num_envs = 32
     
     all_trajectories = []
     
     for iteration in range(num_iterations):
         print(f"\n========== Training Iteration {iteration+1}/{num_iterations} ==========")
-        
-        # 1. Collect phase
-        for episode in range(episodes_per_iteration):
-            trajectory = collect_self_play_trajectory(env, agent, agent, storage, render=False)
-            all_trajectories.extend(trajectory)
+        # 1. Collect phase (Massive parallel generation)
+        trajectories = collect_batched_self_play_trajectories(num_envs, agent, storage)
+        for traj in trajectories:
+            all_trajectories.extend(traj)
             
-        print(f"Collected {len(all_trajectories)} steps from {episodes_per_iteration} episodes.")
+        print(f"Collected {len(all_trajectories)} steps from batched rollouts.")
         
         # 2. Train phase
         batch_size = trainer.ppo_trainer.config.batch_size

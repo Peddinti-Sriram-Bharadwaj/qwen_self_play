@@ -8,19 +8,19 @@ class TrajectoryStorage:
         self.base_dir.mkdir(parents=True, exist_ok=True)
         self.episode_counter = 0
 
-    def start_new_episode(self):
+    def start_new_episode(self) -> str:
         self.episode_counter += 1
-        self.step_counter = 0
-        self.current_episode_dir = self.base_dir / f"episode_{self.episode_counter:04d}"
-        self.current_episode_dir.mkdir(exist_ok=True)
+        episode_id = f"episode_{self.episode_counter:04d}"
+        current_episode_dir = self.base_dir / episode_id
+        current_episode_dir.mkdir(exist_ok=True)
+        return episode_id
 
-    def save_step_latents(self, player: int, cot_latents: torch.Tensor):
+    def save_step_latents(self, episode_id: str, step: int, player: int, cot_latents: torch.Tensor):
         """
         Saves the CoT latents for a specific step to disk.
         cot_latents: shape (seq_len, hidden_dim)
         """
-        self.step_counter += 1
+        episode_dir = self.base_dir / episode_id
         # Save as a standard PyTorch .pt file.
-        # For a massive scale, HDF5 or safetensors is better, but .pt is fine for the skeleton.
-        file_path = self.current_episode_dir / f"step_{self.step_counter:04d}_player_{player}.pt"
+        file_path = episode_dir / f"step_{step:04d}_player_{player}.pt"
         torch.save(cot_latents.clone().detach().cpu(), file_path)

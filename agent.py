@@ -41,6 +41,84 @@ class LocalLLMAgent(Agent):
         # Ensure padding token is set
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
+        # For batched generation, we must pad on the left
+        self.tokenizer.padding_side = "left"
+
+    def batched_act(self, observations: list[str]):
+        """
+        Takes a batch of observation strings.
+        Returns lists of:
+        - actions (list[int])
+        - query_tensors (list[torch.Tensor])
+        - response_tensors (list[torch.Tensor])
+        - cot_latents_batch (list[torch.Tensor])
+        """
+        self.model.eval()
+        
+        prompts = []
+        for obs in observations:
+            messages = [
+                {"role": "system", "content": "You are playing a game of Tic-Tac-Toe. Think step by step. Write your thoughts, then output 'Action: X' where X is your final chosen move (a single digit 0-8)."},
+                {"role": "user", "content": obs}
+            ]
+            prompt = self.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+            prompts.append(prompt)
+            
+        inputs = self.tokenizer(prompts, return_tensors="pt", add_special_tokens=False, padding=True).to(self.device)
+        
+        with torch.no_grad():
+            outputs = self.model.generate(
+                **inputs,
+                max_new_tokens=40,
+                do_sample=True,
+                temperature=0.7,
+                pad_token_id=self.tokenizer.pad_token_id,
+                output_hidden_states=True,
+                return_dict_in_generate=True
+            )
+            
+        sequences = outputs.sequences
+        batch_size = len(observations)
+        
+        actions = []
+        query_tensors = []
+        response_tensors = []
+        cot_latents_batch = []
+        
+        for i in range(batch_size):
+            # 1. Extract query tensor (strip left padding)
+            pad_len = (inputs.input_ids[i] == self.tokenizer.pad_token_id).sum().item()
+            query_tensor = inputs.input_ids[i][pad_len:]
+            
+            # 2. Extract response tensor
+            response_tensor = sequences[i][inputs.input_ids.shape[1]:]
+            
+            # 3. Extract latents for this specific item in the batch
+            cot_latents_list = []
+            if hasattr(outputs, 'hidden_states') and outputs.hidden_states is not None:
+                for step_hidden_states in outputs.hidden_states:
+                    # step_hidden_states[-1] is the last layer. shape: (batch_size, 1, hidden_dim)
+                    cot_latents_list.append(step_hidden_states[-1][i, 0, :])
+            if cot_latents_list:
+                cot_latents = torch.stack(cot_latents_list)
+            else:
+                cot_latents = torch.empty(0)
+                
+            # 4. Extract action digit
+            response_text = self.tokenizer.decode(response_tensor, skip_special_tokens=True)
+            match = re.search(r'Action:\s*(\d)', response_text)
+            if match:
+                action = int(match.group(1))
+            else:
+                fallback_match = re.search(r'\d', response_text)
+                action = int(fallback_match.group()) if fallback_match else -1
+                
+            actions.append(action)
+            query_tensors.append(query_tensor.cpu())
+            response_tensors.append(response_tensor.cpu())
+            cot_latents_batch.append(cot_latents.cpu())
+            
+        return actions, query_tensors, response_tensors, cot_latents_batch
 
     def act(self, observation: str):
         self.model.eval()

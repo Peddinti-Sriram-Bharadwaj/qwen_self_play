@@ -3,70 +3,68 @@ from agent import Agent
 from storage import TrajectoryStorage
 import torch
 
-def collect_self_play_trajectory(env: TicTacToeEnv, agent1: Agent, agent2: Agent, storage: TrajectoryStorage, render: bool = False):
-    obs = env.reset()
-    done = False
+def collect_batched_self_play_trajectories(num_envs: int, agent: Agent, storage: TrajectoryStorage):
+    envs = [TicTacToeEnv() for _ in range(num_envs)]
+    obs_list = [env.reset() for env in envs]
     
-    # We will store: (query_tensor, response_tensor, reward)
-    trajectory = []
+    # Track state for each active environment
+    active_trajectories = [[] for _ in range(num_envs)]
+    episode_ids = [storage.start_new_episode() for _ in range(num_envs)]
+    step_counters = [0 for _ in range(num_envs)]
     
-    agents = {1: agent1, -1: agent2}
+    completed_trajectories = []
     
-    storage.start_new_episode()
+    # We run until all initial N environments finish at least one game.
+    # To keep the batch size exactly N, if an env finishes early, we reset it and keep collecting.
+    # We will stop when we have collected exactly `num_envs` completed trajectories.
     
-    if render:
-        print("Starting new self-play episode...")
-    
-    while not done:
-        current_player = env.current_player
-        agent = agents[current_player]
+    while len(completed_trajectories) < num_envs:
+        # 1. Agent acts on all observations simultaneously
+        actions, query_tensors, response_tensors, cot_latents_batch = agent.batched_act(obs_list)
         
-        if render:
-            print(f"Player {'X' if current_player == 1 else 'O'}'s turn.")
+        # 2. Step all environments
+        for i in range(num_envs):
+            env = envs[i]
+            current_player = env.current_player
+            action = actions[i]
             
-        # 1. Agent acts
-        action, query_tensor, response_tensor, cot_latents = agent.act(obs)
-        if render:
-            print(f"Chosen action: {action}")
+            # Save latents
+            step_counters[i] += 1
+            storage.save_step_latents(episode_ids[i], step_counters[i], current_player, cot_latents_batch[i])
             
-        # 1.5 Flush latents to disk
-        storage.save_step_latents(current_player, cot_latents)
+            # Step env
+            next_obs, reward, done, info = env.step(action)
             
-        # 2. Step environment
-        next_obs, reward, done, info = env.step(action)
-        
-        if render:
-            print(f"Reward: {reward}")
-            print("-" * 20)
+            active_trajectories[i].append({
+                'player': current_player,
+                'query': query_tensors[i],
+                'response': response_tensors[i],
+                'reward': torch.tensor(reward, dtype=torch.float32)
+            })
             
-        trajectory.append({
-            'player': current_player,
-            'query': query_tensor,
-            'response': response_tensor,
-            'reward': torch.tensor(reward, dtype=torch.float32)
-        })
-        
-        obs = next_obs
-        
-    if render:
-        print(f"Episode finished. Info: {info}")
-        
-    # --- Episodic Credit Assignment ---
-    # TRL's PPO step treats each query-response pair independently. 
-    # To learn strategy, all moves in a winning game must be rewarded, and all moves in a losing game penalized.
-    
-    # If the game ended due to a valid terminal state (win/draw)
-    if "winner" in info:
-        winner = info["winner"]
-        for step in trajectory:
-            if winner is None:
-                step['reward'] = torch.tensor(0.0, dtype=torch.float32) # Draw
-            elif step['player'] == winner:
-                step['reward'] = torch.tensor(1.0, dtype=torch.float32) # Win
-            else:
-                step['reward'] = torch.tensor(-1.0, dtype=torch.float32) # Loss
+            if done:
+                # --- Episodic Credit Assignment ---
+                trajectory = active_trajectories[i]
+                if "winner" in info:
+                    winner = info["winner"]
+                    for step in trajectory:
+                        if winner is None:
+                            step['reward'] = torch.tensor(0.0, dtype=torch.float32) # Draw
+                        elif step['player'] == winner:
+                            step['reward'] = torch.tensor(1.0, dtype=torch.float32) # Win
+                        else:
+                            step['reward'] = torch.tensor(-1.0, dtype=torch.float32) # Loss
+                            
+                completed_trajectories.append(trajectory)
                 
-    # If the game ended due to an invalid move, the last step already has -10.0.
-    # We optionally penalize all previous moves by that player too, but usually just penalizing the mistake is enough.
-        
-    return trajectory
+                # Reset environment for the next game to keep batch full
+                obs_list[i] = env.reset()
+                active_trajectories[i] = []
+                episode_ids[i] = storage.start_new_episode()
+                step_counters[i] = 0
+            else:
+                obs_list[i] = next_obs
+                
+    # We might have collected more than num_envs if some finished super fast, 
+    # but returning all completed is fine for PPO.
+    return completed_trajectories
