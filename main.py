@@ -25,6 +25,9 @@ from storage import TrajectoryStorage
 from trainers.trainer_factory import TrainerFactory
 from envs.env_factory import EnvFactory
 from opponents import OpponentManager
+from metrics_logger import MetricsLogger
+from evaluator import Evaluator
+from dummy_agents import RandomAgent, ScriptedKuhnPokerAgent
 import argparse
 
 def main():
@@ -61,6 +64,21 @@ def main():
     # Base prototype of EnvFactory usage
     llm_env = EnvFactory.get_env(backend=args.backend, env_name=args.env)
     
+    print(f"Initializing Evaluator...")
+    evaluator = Evaluator(llm_env=llm_env, storage=TrajectoryStorage(base_dir=f"latents_eval_{args.algo.lower()}"), num_envs=500)
+    
+    print(f"Initializing Metrics Logger...")
+    # We use a simple config dict for the logger
+    config_dict = {
+        "environment": args.env,
+        "backend": args.backend,
+        "algorithm": args.algo,
+        "regime": args.regime,
+        "seed": 42, # Mocking seed for now
+        "use_wandb": True
+    }
+    logger = MetricsLogger(config=config_dict)
+    
     print(f"Initializing {args.algo} Trainer via Factory...")
     trainer = TrainerFactory.get_trainer(args.algo, agent)
     
@@ -83,7 +101,7 @@ def main():
         opponent_manager.prepare_batch_opponent()
         
         # 1. Collect phase (Delegated to Strategy, passing the LLMEnvironment and opponent)
-        trajectories = trainer.collect_data(num_envs, storage, llm_env=llm_env, opponent_agent=opponent_manager.get_opponent())
+        trajectories, game_metrics = trainer.collect_data(num_envs, storage, llm_env=llm_env, opponent_agent=opponent_manager.get_opponent())
         replay_buffer.extend(trajectories)
             
         print(f"Collected {len(trajectories)} steps. Buffer size: {len(replay_buffer)}")
@@ -98,8 +116,11 @@ def main():
             # We train on as many full batches as we can
             num_batches = len(replay_buffer) // batch_size
             
+            # Regime C Warmup: For iterations 0-25, sample on-policy (current batch). Iteration 26 onward, sample from buffer.
+            regime_c_warmed_up = (args.regime == "C" and iteration >= 25)
+            
             for b in range(num_batches):
-                if args.regime == "C":
+                if regime_c_warmed_up:
                     import random
                     # Sample uniformly from the high replay buffer
                     batch = random.sample(replay_buffer, batch_size)
@@ -118,8 +139,14 @@ def main():
             print(f"  - Feature Variance: {stats.get('plasticity/feature_variance', 'N/A')}")
             print(f"  - Dormant Neurons (%): {stats.get('plasticity/dormant_neurons_pct', 'N/A')}")
             
-            # If not using High Replay, clear the used on-policy data
-            if args.regime != "C":
+            # Combine metrics and log
+            combined_metrics = {}
+            combined_metrics.update(game_metrics)
+            combined_metrics.update(stats)
+            logger.log_metrics(iteration, combined_metrics)
+            
+            # If not using High Replay (or if C is in warmup), clear the used on-policy data
+            if not regime_c_warmed_up:
                 remainder = len(replay_buffer) % batch_size
                 if remainder > 0:
                     replay_buffer = replay_buffer[-remainder:]
@@ -139,7 +166,41 @@ def main():
             agent.tokenizer.save_pretrained(checkpoint_dir)
             
             # Save into opponent pool for Regime D
-            opponent_manager.save_checkpoint(iteration + 1)
+            opponent_manager.save_checkpoint(iteration)
+            
+        # 4. Evaluation Hooks
+        eval_schedule = [0, 50, 100, 200, 400, 600, 800, 1000, 1250, 1500, 1750, 2000]
+        if iteration in eval_schedule:
+            print(f"\n--- Running Evaluation at Iteration {iteration} ---")
+            
+            # Evaluate against Frozen Base
+            base_metrics = evaluator.evaluate_matchup(agent, opponent_manager.shell_opponent, "Frozen Base Qwen")
+            logger.log_evaluation(iteration, "frozen_base", base_metrics)
+            
+            # Evaluate against Random
+            random_agent = RandomAgent()
+            random_metrics = evaluator.evaluate_matchup(agent, random_agent, "RandomAgent")
+            logger.log_evaluation(iteration, "random", random_metrics)
+            
+            # Evaluate against Scripted (Kuhn Poker)
+            if args.env.lower() in ["kuhn_poker", "kuhn-poker"]:
+                scripted_agent = ScriptedKuhnPokerAgent()
+                scripted_metrics = evaluator.evaluate_matchup(agent, scripted_agent, "ScriptedKuhnPokerAgent")
+                logger.log_evaluation(iteration, "scripted", scripted_metrics)
+                
+            # Evaluate against Current Self
+            self_metrics = evaluator.evaluate_matchup(agent, agent, "Current Self")
+            logger.log_evaluation(iteration, "current_self", self_metrics)
+            
+            # Evaluate against Historical (if any exist)
+            if opponent_manager.historical_pool:
+                import random
+                hist_ckpt = random.choice(opponent_manager.historical_pool)
+                opponent_manager.shell_opponent.model.load_state_dict(torch.load(hist_ckpt))
+                hist_metrics = evaluator.evaluate_matchup(agent, opponent_manager.shell_opponent, f"Historical ({hist_ckpt})")
+                logger.log_evaluation(iteration, "historical", hist_metrics)
+                
+    logger.finish()
 
 if __name__ == "__main__":
     main()

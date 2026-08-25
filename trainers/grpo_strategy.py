@@ -18,13 +18,13 @@ class GRPOStrategy(TrainerStrategy):
     def collect_data(self, num_envs: int, storage, llm_env, opponent_agent) -> list:
         # For GRPO, we need G completions per prompt. 
         # In a robust implementation, we would modify batched_act to generate G times.
-        trajectories = collect_batched_self_play_trajectories(num_envs, self.agent, opponent_agent, storage, llm_env)
+        trajectories, game_metrics = collect_batched_self_play_trajectories(num_envs, self.agent, opponent_agent, storage, llm_env)
         
         flattened_steps = []
         for traj in trajectories:
             flattened_steps.extend(traj)
             
-        return flattened_steps
+        return flattened_steps, game_metrics
 
     def update(self, batch: list) -> dict:
         """

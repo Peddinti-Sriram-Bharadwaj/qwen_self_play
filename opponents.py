@@ -17,6 +17,7 @@ class OpponentManager:
         self.checkpoint_dir = checkpoint_dir
         self.historical_pool = []
         self.batch_opponent = None
+        self.save_schedule = [100, 200, 400, 600, 800, 1000, 1200, 1400, 1600, 1800, 2000]
         
         if self.regime in ["A", "D"]:
             print(f"Initializing Opponent Shell (Regime {self.regime})...")
@@ -26,12 +27,18 @@ class OpponentManager:
             self.shell_opponent.model.eval()
             self.shell_opponent.model.requires_grad_(False)
             
-    def save_checkpoint(self, iteration: int):
+            if self.regime == "D":
+                # Save the frozen base immediately to the historical pool (checkpoint_0)
+                self.save_checkpoint(0, force=True)
+            
+    def save_checkpoint(self, iteration: int, force: bool = False):
         if self.regime == "D":
-            os.makedirs(self.checkpoint_dir, exist_ok=True)
-            path = os.path.join(self.checkpoint_dir, f"checkpoint_{iteration}.pt")
-            torch.save(self.learning_agent.model.state_dict(), path)
-            self.historical_pool.append(path)
+            if force or iteration in self.save_schedule:
+                os.makedirs(self.checkpoint_dir, exist_ok=True)
+                path = os.path.join(self.checkpoint_dir, f"checkpoint_{iteration}.pt")
+                torch.save(self.learning_agent.model.state_dict(), path)
+                self.historical_pool.append(path)
+                print(f"[OpponentManager] Saved historical checkpoint to {path}. Pool size: {len(self.historical_pool)}")
             
     def prepare_batch_opponent(self):
         """
@@ -46,11 +53,9 @@ class OpponentManager:
         elif self.regime == "D":
             # FSP: Sample uniformly from historical checkpoints
             if not self.historical_pool:
-                # If no checkpoints exist yet, play against current self
                 self.batch_opponent = self.learning_agent
             else:
                 ckpt_path = random.choice(self.historical_pool)
-                print(f"[OpponentManager] Loaded historical opponent: {ckpt_path}")
                 self.shell_opponent.model.load_state_dict(torch.load(ckpt_path))
                 self.batch_opponent = self.shell_opponent
                 

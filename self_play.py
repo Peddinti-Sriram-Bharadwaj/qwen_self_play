@@ -25,6 +25,13 @@ def collect_batched_self_play_trajectories(num_envs: int, agent: Agent, opponent
     
     completed_trajectories = []
     
+    # Track metrics
+    player_0_wins = 0
+    player_1_wins = 0
+    draws = 0
+    invalid_actions = 0
+    total_games_finished = 0
+    
     while len(completed_trajectories) < num_envs:
         learner_indices = [i for i, p in enumerate(current_players) if p == 0]
         opponent_indices = [i for i, p in enumerate(current_players) if p == 1]
@@ -80,6 +87,7 @@ def collect_batched_self_play_trajectories(num_envs: int, agent: Agent, opponent
                     reward = -10.0
                     done = True
                     info["returns"] = [-10.0, 10.0] if current_player == 0 else [10.0, -10.0]
+                    invalid_actions += 1
                     invalid_action_retries[i] = 0
             else:
                 invalid_action_retries[i] = 0
@@ -112,8 +120,17 @@ def collect_batched_self_play_trajectories(num_envs: int, agent: Agent, opponent
                         
                     for step in trajectory:
                         step['reward'] = torch.tensor(final_reward, dtype=torch.float32)
+                        
+                    # Calculate win/loss/draw
+                    if final_reward > 0:
+                        player_0_wins += 1
+                    elif final_reward < 0:
+                        player_1_wins += 1
+                    else:
+                        draws += 1
                             
                 completed_trajectories.append(trajectory)
+                total_games_finished += 1
                 
                 # Reset environment
                 o, p = env.reset()
@@ -127,4 +144,11 @@ def collect_batched_self_play_trajectories(num_envs: int, agent: Agent, opponent
                 obs_list[i] = next_obs
                 current_players[i] = next_player
                 
-    return completed_trajectories
+    game_metrics = {
+        "p0_win_rate": player_0_wins / total_games_finished if total_games_finished > 0 else 0.0,
+        "p1_win_rate": player_1_wins / total_games_finished if total_games_finished > 0 else 0.0,
+        "draw_rate": draws / total_games_finished if total_games_finished > 0 else 0.0,
+        "invalid_action_rate": invalid_actions / total_games_finished if total_games_finished > 0 else 0.0
+    }
+    
+    return completed_trajectories, game_metrics

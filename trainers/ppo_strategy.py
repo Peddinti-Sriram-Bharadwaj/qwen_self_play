@@ -32,14 +32,14 @@ class PPOStrategy(TrainerStrategy):
 
     def collect_data(self, num_envs: int, storage, llm_env, opponent_agent) -> list:
         # PPO requires standard batched trajectories
-        trajectories = collect_batched_self_play_trajectories(num_envs, self.agent, opponent_agent, storage, llm_env)
+        trajectories, game_metrics = collect_batched_self_play_trajectories(num_envs, self.agent, opponent_agent, storage, llm_env)
         
         # Flatten trajectories into a list of steps
         flattened_steps = []
         for traj in trajectories:
             flattened_steps.extend(traj)
             
-        return flattened_steps
+        return flattened_steps, game_metrics
 
     def measure_plasticity(self, queries):
         """
