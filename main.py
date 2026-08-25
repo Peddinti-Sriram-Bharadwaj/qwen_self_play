@@ -1,3 +1,19 @@
+import os
+import argparse
+
+# Parse args before importing torch/jax to configure OS-level GPU isolation
+parser = argparse.ArgumentParser(description="Generalized LLM MARL Training")
+parser.add_argument("--algo", type=str, default="PPO", choices=["PPO", "GRPO", "REINFORCE", "REINFORCE_PLUS", "DAPO"], help="RL Algorithm to run")
+parser.add_argument("--env", type=str, default="TicTacToe-v0", help="The name of the environment")
+parser.add_argument("--backend", type=str, default="textarena", choices=["textarena", "openspiel", "pettingzoo", "jaxmarl"], help="The environment suite backend")
+parser.add_argument("--llm-gpu", type=int, default=0, help="GPU ID for the LLM")
+parser.add_argument("--env-gpu", type=int, default=1, help="GPU ID for JaxMARL")
+args = parser.parse_args()
+
+# Disable JAX preallocation immediately so it doesn't crash PyTorch LLMs
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
+
 import torch
 from environment import TicTacToeEnv
 from agent import LocalLLMAgent
@@ -8,12 +24,6 @@ from envs.env_factory import EnvFactory
 import argparse
 
 def main():
-    parser = argparse.ArgumentParser(description="Generalized LLM MARL Training")
-    parser.add_argument("--algo", type=str, default="PPO", choices=["PPO", "GRPO", "REINFORCE", "REINFORCE_PLUS", "DAPO"], help="RL Algorithm to run")
-    parser.add_argument("--env", type=str, default="TicTacToe-v0", help="The name of the environment (e.g. TicTacToe-v0, kuhn_poker)")
-    parser.add_argument("--backend", type=str, default="textarena", choices=["textarena", "openspiel", "pettingzoo", "jaxmarl"], help="The environment suite backend")
-    args = parser.parse_args()
-    
     print(f"=== Generalized LLM MARL: {args.algo} on {args.backend.upper()} ({args.env}) ===")
     
     # env initialization is now handled dynamically in self_play.py for vectorized rollouts
@@ -24,11 +34,24 @@ def main():
     
     # Hardware Partitioning for JaxMARL
     if args.backend == "jaxmarl":
-        print("Hardware Partitioning: Pinning Qwen to GPU 0, assuming JaxMARL runs on GPU 1...")
-        # Handled at the environment layer or launch script layer.
-    
-    print(f"Initializing agent with {model_name}...")
-    agent = LocalLLMAgent(model_name=model_name)
+        print(f"Hardware Partitioning: Pinning Qwen to GPU {args.llm_gpu}, JaxMARL to GPU {args.env_gpu}...")
+        try:
+            import jax
+            if len(jax.devices()) > args.env_gpu:
+                jax.config.update('jax_default_device', jax.devices()[args.env_gpu])
+        except Exception:
+            pass
+            
+    # Assign the LLM explicitly to the correct GPU
+    if torch.cuda.is_available():
+        device = f"cuda:{args.llm_gpu}"
+    elif torch.backends.mps.is_available():
+        device = "mps"
+    else:
+        device = "cpu"
+        
+    print(f"Initializing agent with {model_name} on {device}...")
+    agent = LocalLLMAgent(model_name=model_name, device=device)
     
     print(f"Initializing {args.backend.upper()} Environment wrapper...")
     # Base prototype of EnvFactory usage
