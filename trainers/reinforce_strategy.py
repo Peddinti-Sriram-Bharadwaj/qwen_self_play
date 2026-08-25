@@ -51,6 +51,7 @@ class ReinforceStrategy(TrainerStrategy):
         
         # Calculate log probs and loss for each step using Gradient Accumulation
         total_loss_val = 0.0
+        total_log_prob = 0.0
         for i in range(len(batch)):
             log_prob = compute_sequence_logprobs(self.agent.model, queries[i], responses[i], pad_token_id)
             # REINFORCE objective: maximize expected return -> minimize -log_prob * advantage
@@ -61,6 +62,7 @@ class ReinforceStrategy(TrainerStrategy):
             scaled_loss.backward()
             
             total_loss_val += step_loss.item()
+            total_log_prob += log_prob.item()
             
         avg_loss = total_loss_val / len(batch)
         
@@ -68,11 +70,21 @@ class ReinforceStrategy(TrainerStrategy):
         torch.nn.utils.clip_grad_norm_(self.agent.model.parameters(), 1.0)
         self.optimizer.step()
         
-        print(f"Performed REINFORCE update on {len(batch)} steps. Loss: {avg_loss:.4f}, Baseline: {self.baseline:.4f}")
+        
+        avg_reward = rewards.mean().item()
+        win_rate = (rewards > 0).float().mean().item()
+        avg_seq_len = sum(len(r) for r in responses) / len(responses)
+        avg_log_prob = total_log_prob / len(batch)
+        
+        print(f"Performed REINFORCE update on {len(batch)} steps. Loss: {avg_loss:.4f} | Reward: {avg_reward:.2f} | Win Rate: {win_rate:.2f}")
         
         return {
             "reinforce/loss": avg_loss,
             "reinforce/baseline": self.baseline,
+            "reinforce/mean_reward": avg_reward,
+            "reinforce/win_rate": win_rate,
+            "reinforce/avg_seq_len": avg_seq_len,
+            "reinforce/mean_log_prob": avg_log_prob,
             "plasticity/feature_variance": 0.0, 
             "plasticity/dormant_neurons_pct": 0.0
         }
