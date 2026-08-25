@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from storage import TrajectoryStorage
 
 class TrainerStrategy(ABC):
     """
