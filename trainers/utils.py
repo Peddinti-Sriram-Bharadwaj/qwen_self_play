@@ -10,7 +10,11 @@ def compute_sequence_logprobs(model, query, response, pad_token_id):
     
     # Forward pass
     outputs = model(input_ids)
-    logits = outputs.logits # Shape: [1, seq_len, vocab_size]
+    
+    if isinstance(outputs, tuple):
+        logits = outputs[0] # TRL AutoModelForCausalLMWithValueHead returns a tuple (logits, _, values)
+    else:
+        logits = outputs.logits # Shape: [1, seq_len, vocab_size]
     
     # The logit at index t predicts the token at index t+1.
     # Therefore, the logits predicting the response tokens start at len(query) - 1.
