@@ -45,10 +45,14 @@ class JaxMARLAdapter(LLMEnvironment):
         if parsed_action is None:
             return "INVALID", -10.0, True, {"msg": "Invalid action format."}
             
-        # JaxMARL step expects a dictionary of actions for all agents
-        # Since this is a scaffold, we simulate a dummy action for other agents or run self-play
-        # For simplicity, we just pass the parsed action for our agent
-        actions = {self.agent_name: jnp.array(parsed_action)}
+        # JaxMARL step expects a dictionary of actions for all agents (parallel env)
+        # We simulate dummy action (0) for other agents since we only parse for our agent
+        actions = {}
+        for agent in self.env.agents:
+            if agent == self.agent_name:
+                actions[agent] = jnp.array(parsed_action)
+            else:
+                actions[agent] = jnp.array(0)
         
         self.key, subkey = jax.random.split(self.key)
         self.obs, self.state, rewards, dones, infos = self.jit_step(subkey, self.state, actions)
