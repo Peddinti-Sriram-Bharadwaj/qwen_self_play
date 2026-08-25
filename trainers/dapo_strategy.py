@@ -40,7 +40,7 @@ class DAPOStrategy(TrainerStrategy):
         
         pad_token_id = self.agent.tokenizer.pad_token_id
         
-        losses = []
+        total_loss_val = 0.0
         clip_ratio = 0.2
         beta = 0.1 # Entropy penalty coefficient
         
@@ -62,18 +62,21 @@ class DAPOStrategy(TrainerStrategy):
             entropy_penalty = beta * log_prob
             
             step_loss = -torch.min(surr1, surr2) - entropy_penalty
-            losses.append(step_loss)
             
-        total_loss = torch.stack(losses).mean()
+            scaled_loss = step_loss / len(batch)
+            scaled_loss.backward()
+            
+            total_loss_val += step_loss.item()
+            
+        avg_loss = total_loss_val / len(batch)
         
-        total_loss.backward()
         torch.nn.utils.clip_grad_norm_(self.agent.model.parameters(), 1.0)
         self.optimizer.step()
         
-        print(f"Performed DAPO update on {len(batch)} steps. Loss: {total_loss.item():.4f}")
+        print(f"Performed DAPO update on {len(batch)} steps. Loss: {avg_loss:.4f}")
         
         return {
-            "dapo/loss": total_loss.item(),
+            "dapo/loss": avg_loss,
             "plasticity/feature_variance": 0.0, 
             "plasticity/dormant_neurons_pct": 0.0
         }
