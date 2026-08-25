@@ -24,40 +24,41 @@ def main():
     print("Initializing Trajectory Storage...")
     storage = TrajectoryStorage(base_dir="latents")
     
-    num_episodes = 2
-    all_trajectories = []
+    num_iterations = 100 # Overall training loops
+    episodes_per_iteration = 10 # Collect 10 games before trying to train
     
-    # 1. Collect phase
-    for episode in range(num_episodes):
-        print(f"\n--- Episode {episode+1}/{num_episodes} ---")
-        trajectory = collect_self_play_trajectory(env, agent, agent, storage, render=True)
-        all_trajectories.extend(trajectory)
-        print(f"Collected trajectory of length {len(trajectory)}.")
+    for iteration in range(num_iterations):
+        print(f"\n========== Training Iteration {iteration+1}/{num_iterations} ==========")
+        all_trajectories = []
         
-    # 2. Train phase
-    # TRL PPO performs best with batched updates, so we pool all steps from the episodes
-    print(f"\n--- Training Phase ---")
-    print(f"Total steps accumulated: {len(all_trajectories)}")
-    
-    # We must ensure we feed batch_size elements to the trainer, or it will throw an error.
-    # The config expects batch_size=2. Let's slice it just to be safe.
-    batch_size = trainer.ppo_trainer.config.batch_size
-    
-    if len(all_trajectories) >= batch_size:
-        # For the skeleton, just grab a batch and train
-        batch = all_trajectories[:batch_size]
-        stats = trainer.update(batch)
+        # 1. Collect phase
+        for episode in range(episodes_per_iteration):
+            trajectory = collect_self_play_trajectory(env, agent, agent, storage, render=False)
+            all_trajectories.extend(trajectory)
+            
+        print(f"Collected {len(all_trajectories)} steps from {episodes_per_iteration} episodes.")
         
-        print(f"Trainer Stats:")
-        print(f"  - Policy Loss: {stats.get('ppo/loss/policy', 'N/A')}")
-        print(f"  - Value Loss: {stats.get('ppo/loss/value', 'N/A')}")
-        print(f"  - KL Divergence: {stats.get('objective/kl', 'N/A')}")
-        print(f"  - Return: {stats.get('ppo/returns/mean', 'N/A')}")
-        print(f"Plasticity Metrics:")
-        print(f"  - Feature Variance: {stats.get('plasticity/feature_variance', 'N/A')}")
-        print(f"  - Dormant Neurons (%): {stats.get('plasticity/dormant_neurons_pct', 'N/A')}")
-    else:
-        print("Not enough trajectories collected for a batch update.")
+        # 2. Train phase
+        batch_size = trainer.ppo_trainer.config.batch_size
+        
+        if len(all_trajectories) >= batch_size:
+            # We train on as many full batches as we collected
+            num_batches = len(all_trajectories) // batch_size
+            for b in range(num_batches):
+                start_idx = b * batch_size
+                batch = all_trajectories[start_idx : start_idx + batch_size]
+                stats = trainer.update(batch)
+                
+            print(f"Trainer Stats (Last Batch):")
+            print(f"  - Policy Loss: {stats.get('ppo/loss/policy', 'N/A')}")
+            print(f"  - Value Loss: {stats.get('ppo/loss/value', 'N/A')}")
+            print(f"  - KL Divergence: {stats.get('objective/kl', 'N/A')}")
+            print(f"  - Return: {stats.get('ppo/returns/mean', 'N/A')}")
+            print(f"Plasticity Metrics:")
+            print(f"  - Feature Variance: {stats.get('plasticity/feature_variance', 'N/A')}")
+            print(f"  - Dormant Neurons (%): {stats.get('plasticity/dormant_neurons_pct', 'N/A')}")
+        else:
+            print(f"Not enough trajectories ({len(all_trajectories)}) for a batch ({batch_size}). Skipping update.")
 
 if __name__ == "__main__":
     main()

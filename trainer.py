@@ -6,15 +6,18 @@ class TRLTrainer:
         self.agent = agent
         
         # PPO Configuration
-        # We use a very small batch size for the walking skeleton to run efficiently on Mac
         config = PPOConfig(
-            batch_size=2,
-            mini_batch_size=2,
-            learning_rate=1e-5,
-            ppo_epochs=1,
+            learning_rate=1e-5,          # Low LR to prevent destroying the pretrained weights
+            batch_size=32,               # Larger batch size for stable gradients
+            mini_batch_size=8,           # Must divide batch_size
             gradient_accumulation_steps=1,
-            # We don't want to optimize the whole model for a walking skeleton to save memory, 
-            # but since it's a tiny model we can just let it run.
+            ppo_epochs=4,                # Number of optimisation epochs per batch
+            init_kl_coef=0.1,            # KL penalty to keep the model producing valid text
+            target_kl=0.1,               # Stop updating if KL diverges too much
+            gamma=0.99,                  # Standard discount factor
+            lam=0.95,                    # GAE lambda
+            cliprange=0.2,               # Standard PPO clipping
+            cliprange_value=0.2,         # Value clipping
         )
         
         # PPOTrainer will automatically create a frozen ref_model from model if ref_model=None
