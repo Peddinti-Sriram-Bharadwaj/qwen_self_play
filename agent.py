@@ -5,11 +5,10 @@ from abc import ABC, abstractmethod
 import re
 
 class Agent(ABC):
-    @abstractmethod
     def act(self, observation: str):
         """
         Should return:
-        - action (int): The parsed action for the environment.
+        - action (str): The raw generated text response from the LLM.
         - query_tensor (torch.Tensor): The tokenized observation.
         - response_tensor (torch.Tensor): The tokenized generation (just the action tokens).
         - cot_latents (torch.Tensor): The hidden states of the generated CoT tokens.
@@ -48,7 +47,7 @@ class LocalLLMAgent(Agent):
         """
         Takes a batch of observation strings.
         Returns lists of:
-        - actions (list[int])
+        - actions (list[str])
         - query_tensors (list[torch.Tensor])
         - response_tensors (list[torch.Tensor])
         - cot_latents_batch (list[torch.Tensor])
@@ -58,7 +57,7 @@ class LocalLLMAgent(Agent):
         prompts = []
         for obs in observations:
             messages = [
-                {"role": "system", "content": "You are playing a game of Tic-Tac-Toe. Think step by step. Write your thoughts, then output 'Action: X' where X is your final chosen move (a single digit 0-8)."},
+                {"role": "system", "content": "You are playing a text-based game. Think step by step. Write your thoughts, then end with 'ACTION: <your move>'."},
                 {"role": "user", "content": obs}
             ]
             prompt = self.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
@@ -104,14 +103,9 @@ class LocalLLMAgent(Agent):
             else:
                 cot_latents = torch.empty(0)
                 
-            # 4. Extract action digit
+            # 4. Return raw response text as action
             response_text = self.tokenizer.decode(response_tensor, skip_special_tokens=True)
-            match = re.search(r'Action:\s*(\d)', response_text)
-            if match:
-                action = int(match.group(1))
-            else:
-                fallback_match = re.search(r'\d', response_text)
-                action = int(fallback_match.group()) if fallback_match else -1
+            action = response_text
                 
             actions.append(action)
             query_tensors.append(query_tensor.cpu())
@@ -124,7 +118,7 @@ class LocalLLMAgent(Agent):
         self.model.eval()
         # Prompt model for Chain of Thought
         messages = [
-            {"role": "system", "content": "You are playing a game of Tic-Tac-Toe. Think step by step. Write your thoughts, then output 'Action: X' where X is your final chosen move (a single digit 0-8)."},
+            {"role": "system", "content": "You are playing a text-based game. Think step by step. Write your thoughts, then end with 'ACTION: <your move>'."},
             {"role": "user", "content": observation}
         ]
         prompt = self.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
@@ -160,13 +154,7 @@ class LocalLLMAgent(Agent):
         else:
             cot_latents = torch.empty(0)
         
-        # Extract action digit from CoT response
-        match = re.search(r'Action:\s*(\d)', response_text)
-        if match:
-            action = int(match.group(1))
-        else:
-            # Fallback
-            fallback_match = re.search(r'\d', response_text)
-            action = int(fallback_match.group()) if fallback_match else -1
+        # Return raw response text as action
+        action = response_text
             
         return action, query_tensor.cpu(), response_tensor.cpu(), cot_latents.cpu()

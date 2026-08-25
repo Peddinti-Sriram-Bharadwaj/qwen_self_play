@@ -1,16 +1,21 @@
-from environment import TicTacToeEnv
 from agent import Agent
 from storage import TrajectoryStorage
+from envs.env_factory import EnvFactory
 import torch
+import copy
 
-def collect_batched_self_play_trajectories(num_envs: int, agent: Agent, storage: TrajectoryStorage):
-    envs = [TicTacToeEnv() for _ in range(num_envs)]
-    obs_list = [env.reset() for env in envs]
+def collect_batched_self_play_trajectories(num_envs: int, agent: Agent, storage: TrajectoryStorage, llm_env):
+    envs = [copy.deepcopy(llm_env) for _ in range(num_envs)]
+    obs_list = [env.reset(player_id=1) for env in envs]
     
     # Track state for each active environment
     active_trajectories = [[] for _ in range(num_envs)]
     episode_ids = [storage.start_new_episode() for _ in range(num_envs)]
     step_counters = [0 for _ in range(num_envs)]
+    
+    # For invalid action resampling
+    invalid_action_retries = [0 for _ in range(num_envs)]
+    MAX_RETRIES = 2
     
     completed_trajectories = []
     
@@ -25,15 +30,34 @@ def collect_batched_self_play_trajectories(num_envs: int, agent: Agent, storage:
         # 2. Step all environments
         for i in range(num_envs):
             env = envs[i]
-            current_player = env.current_player
-            action = actions[i]
+            # Assuming player 1 for turn tracking if the env doesn't expose it natively yet
+            current_player = 1 
+            text_action = actions[i]
             
             # Save latents
             step_counters[i] += 1
             storage.save_step_latents(episode_ids[i], step_counters[i], current_player, cot_latents_batch[i])
             
-            # Step env
-            next_obs, reward, done, info = env.step(action)
+            # Step env (this will handle parsing internally)
+            next_obs, reward, done, info = env.step(text_action)
+            
+            # Invalid Action Resampling Logic
+            if next_obs == "INVALID":
+                invalid_action_retries[i] += 1
+                if invalid_action_retries[i] <= MAX_RETRIES:
+                    # Resample: Append a warning to the observation to prompt the model again
+                    obs_list[i] = obs_list[i] + "\nWARNING: Your previous action was invalid. Please try again. End with ACTION: <move>"
+                    # Do not append to active_trajectories or step forward
+                    continue
+                else:
+                    # Give up, penalize heavily, and end the game
+                    reward = -10.0
+                    done = True
+                    info["winner"] = -1 # Opponent wins by default
+                    invalid_action_retries[i] = 0
+            else:
+                # Valid move, reset retries
+                invalid_action_retries[i] = 0
             
             active_trajectories[i].append({
                 'player': current_player,
@@ -58,10 +82,11 @@ def collect_batched_self_play_trajectories(num_envs: int, agent: Agent, storage:
                 completed_trajectories.append(trajectory)
                 
                 # Reset environment for the next game to keep batch full
-                obs_list[i] = env.reset()
+                obs_list[i] = env.reset(player_id=1)
                 active_trajectories[i] = []
                 episode_ids[i] = storage.start_new_episode()
                 step_counters[i] = 0
+                invalid_action_retries[i] = 0
             else:
                 obs_list[i] = next_obs
                 

@@ -30,9 +30,9 @@ class PPOStrategy(TrainerStrategy):
             tokenizer=self.agent.tokenizer
         )
 
-    def collect_data(self, num_envs: int, storage) -> list:
+    def collect_data(self, num_envs: int, storage, llm_env) -> list:
         # PPO requires standard batched trajectories
-        trajectories = collect_batched_self_play_trajectories(num_envs, self.agent, storage)
+        trajectories = collect_batched_self_play_trajectories(num_envs, self.agent, storage, llm_env)
         
         # Flatten trajectories into a list of steps
         flattened_steps = []
