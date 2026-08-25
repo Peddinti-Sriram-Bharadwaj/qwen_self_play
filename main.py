@@ -3,10 +3,16 @@ from environment import TicTacToeEnv
 from agent import LocalLLMAgent
 from self_play import collect_batched_self_play_trajectories
 from storage import TrajectoryStorage
-from trainer import TRLTrainer
+from trainers.trainer_factory import TrainerFactory
+import argparse
 
 def main():
-    print("=== Walking Skeleton: Continual RL with Self-Play (TRL Integration) ===")
+    parser = argparse.ArgumentParser(description="Continual RL Multi-Algorithm Training")
+    parser.add_argument("--algo", type=str, default="PPO", choices=["PPO", "GRPO", "DPO", "KTO"], help="RL Algorithm to run")
+    args = parser.parse_args()
+    
+    print(f"=== Walking Skeleton: Continual RL with Self-Play ({args.algo} Integration) ===")
+    
     # env initialization is now handled dynamically in self_play.py for vectorized rollouts
     
     # We use a small local model for the walking skeleton. 
@@ -17,29 +23,28 @@ def main():
     # For self-play we can use the same agent playing against itself (shared weights)
     agent = LocalLLMAgent(model_name=model_name)
     
-    print("Initializing TRL PPOTrainer...")
-    trainer = TRLTrainer(agent)
+    print(f"Initializing {args.algo} Trainer via Factory...")
+    trainer = TrainerFactory.get_trainer(args.algo, agent)
     
     print("Initializing Trajectory Storage...")
-    storage = TrajectoryStorage(base_dir="latents")
+    storage = TrajectoryStorage(base_dir=f"latents_{args.algo.lower()}")
     
-    num_iterations = 100 # Overall training loops
+    num_iterations = 500 # Overall training loops (Raised to force plasticity loss)
     # 32 concurrent games running in parallel (saturating the GPU)
     num_envs = 32
+    batch_size = 32 # Common batch size across algos
     
     all_trajectories = []
     
     for iteration in range(num_iterations):
         print(f"\n========== Training Iteration {iteration+1}/{num_iterations} ==========")
-        # 1. Collect phase (Massive parallel generation)
-        trajectories = collect_batched_self_play_trajectories(num_envs, agent, storage)
-        for traj in trajectories:
-            all_trajectories.extend(traj)
+        # 1. Collect phase (Delegated to Strategy)
+        trajectories = trainer.collect_data(num_envs, storage)
+        all_trajectories.extend(trajectories)
             
         print(f"Collected {len(all_trajectories)} steps from batched rollouts.")
         
         # 2. Train phase
-        batch_size = trainer.ppo_trainer.config.batch_size
         
         if len(all_trajectories) >= batch_size:
             # We train on as many full batches as we collected
@@ -49,11 +54,10 @@ def main():
                 batch = all_trajectories[start_idx : start_idx + batch_size]
                 stats = trainer.update(batch)
                 
-            print(f"Trainer Stats (Last Batch):")
-            print(f"  - Policy Loss: {stats.get('ppo/loss/policy', 'N/A')}")
-            print(f"  - Value Loss: {stats.get('ppo/loss/value', 'N/A')}")
-            print(f"  - KL Divergence: {stats.get('objective/kl', 'N/A')}")
-            print(f"  - Return: {stats.get('ppo/returns/mean', 'N/A')}")
+            print(f"Trainer Stats ({args.algo} - Last Batch):")
+            for k, v in stats.items():
+                if not k.startswith("plasticity"):
+                    print(f"  - {k}: {v}")
             print(f"Plasticity Metrics:")
             print(f"  - Feature Variance: {stats.get('plasticity/feature_variance', 'N/A')}")
             print(f"  - Dormant Neurons (%): {stats.get('plasticity/dormant_neurons_pct', 'N/A')}")
@@ -70,9 +74,9 @@ def main():
         # 3. Checkpointing (for Safety Frontier Evaluation)
         if (iteration + 1) % 10 == 0:
             import os
-            checkpoint_dir = f"checkpoints/iter_{iteration+1}"
+            checkpoint_dir = f"checkpoints_{args.algo.lower()}/iter_{iteration+1}"
             os.makedirs(checkpoint_dir, exist_ok=True)
-            print(f"Saving model checkpoint to {checkpoint_dir}...")
+            print(f"Saving {args.algo} model checkpoint to {checkpoint_dir}...")
             # We save the active policy model
             agent.model.pretrained_model.save_pretrained(checkpoint_dir)
             agent.tokenizer.save_pretrained(checkpoint_dir)
