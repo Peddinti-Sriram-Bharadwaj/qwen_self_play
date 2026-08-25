@@ -10,6 +10,8 @@ class JaxMARLAdapter(LLMEnvironment):
     JaxMARL runs heavily on XLA/GPU. This adapter ensures we run on a specific GPU
     and translate the JAX arrays into text for the LLM.
     """
+    _compiled_envs = {}
+
     def __init__(self, game_name: str = "overcooked"):
         try:
             import jaxmarl
@@ -20,9 +22,15 @@ class JaxMARLAdapter(LLMEnvironment):
         self.game_name = game_name
         self.env = make(game_name)
         
-        # We JIT compile the step and reset functions for speed
-        self.jit_reset = jax.jit(self.env.reset)
-        self.jit_step = jax.jit(self.env.step)
+        # Cache JIT compilation at the class level so deepcopy doesn't trigger recompiles
+        if game_name not in JaxMARLAdapter._compiled_envs:
+            JaxMARLAdapter._compiled_envs[game_name] = {
+                'reset': jax.jit(self.env.reset),
+                'step': jax.jit(self.env.step)
+            }
+            
+        self.jit_reset = JaxMARLAdapter._compiled_envs[game_name]['reset']
+        self.jit_step = JaxMARLAdapter._compiled_envs[game_name]['step']
         
         # JAX state variables
         self.key = jax.random.PRNGKey(0)
