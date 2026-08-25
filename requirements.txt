@@ -1,5 +1,21 @@
-torch
+# Core Deep Learning & NLP
 transformers
 accelerate
-numpy
-trl
+datasets
+typing-extensions
+huggingface_hub
+
+# Reinforcement Learning (must be pinned due to PPOTrainer breaking changes)
+trl==0.9.4
+
+# MARL Environments & Adapters
+textarena
+open_spiel
+pettingzoo[classic]
+jaxmarl
+jax
+jaxlib
+
+# Utilities
+colorama
+matplotlib
