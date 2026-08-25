@@ -12,9 +12,9 @@ class ReinforcePlusStrategy(TrainerStrategy):
         self.agent = agent
         self.optimizer = torch.optim.Adam(self.agent.model.parameters(), lr=1e-5)
 
-    def collect_data(self, num_envs: int, storage, llm_env) -> list:
+    def collect_data(self, num_envs: int, storage, llm_env, opponent_agent) -> list:
         # In a Proposer-Solver setup, we might split the roles across the batch.
-        trajectories = collect_batched_self_play_trajectories(num_envs, self.agent, storage, llm_env)
+        trajectories = collect_batched_self_play_trajectories(num_envs, self.agent, opponent_agent, storage, llm_env)
         
         flattened_steps = []
         for traj in trajectories:

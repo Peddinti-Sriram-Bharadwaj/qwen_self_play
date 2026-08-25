@@ -11,7 +11,7 @@ class TrainerStrategy(ABC):
         pass
 
     @abstractmethod
-    def collect_data(self, num_envs: int, storage, llm_env) -> list:
+    def collect_data(self, num_envs: int, storage: TrajectoryStorage, llm_env, opponent_agent) -> list:
         """
         Runs the batched rollout loop to collect a batch of trajectories.
         Returns the collected batch of data formatted for the specific algorithm.

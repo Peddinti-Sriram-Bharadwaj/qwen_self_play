@@ -12,8 +12,8 @@ class DAPOStrategy(TrainerStrategy):
         self.agent = agent
         self.optimizer = torch.optim.Adam(self.agent.model.parameters(), lr=1e-5)
 
-    def collect_data(self, num_envs: int, storage, llm_env) -> list:
-        trajectories = collect_batched_self_play_trajectories(num_envs, self.agent, storage, llm_env)
+    def collect_data(self, num_envs: int, storage, llm_env, opponent_agent) -> list:
+        trajectories = collect_batched_self_play_trajectories(num_envs, self.agent, opponent_agent, storage, llm_env)
         
         flattened_steps = []
         for traj in trajectories:

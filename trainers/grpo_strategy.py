@@ -15,10 +15,10 @@ class GRPOStrategy(TrainerStrategy):
         # implementing the GRPO loss directly is often easier.
         pass
 
-    def collect_data(self, num_envs: int, storage, llm_env) -> list:
+    def collect_data(self, num_envs: int, storage, llm_env, opponent_agent) -> list:
         # For GRPO, we need G completions per prompt. 
         # In a robust implementation, we would modify batched_act to generate G times.
-        trajectories = collect_batched_self_play_trajectories(num_envs, self.agent, storage, llm_env)
+        trajectories = collect_batched_self_play_trajectories(num_envs, self.agent, opponent_agent, storage, llm_env)
         
         flattened_steps = []
         for traj in trajectories:
