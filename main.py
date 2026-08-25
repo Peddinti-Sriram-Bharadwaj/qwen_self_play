@@ -11,6 +11,8 @@ parser.add_argument("--env-gpu", type=int, default=1, help="GPU ID for JaxMARL")
 parser.add_argument("--batch-size", type=int, default=256, help="Global batch size for RL updates")
 parser.add_argument("--num-envs", type=int, default=32, help="Number of parallel environments to run during collection")
 parser.add_argument("--regime", type=str, default="B", choices=["A", "B", "C", "D"], help="Self-Play Regime (A: Fixed, B: Evolving, C: High Replay, D: League)")
+parser.add_argument("--iterations", type=int, default=1000, help="Number of training iterations")
+parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
 args = parser.parse_args()
 
 # Disable JAX preallocation immediately so it doesn't crash PyTorch LLMs
@@ -29,8 +31,15 @@ from metrics_logger import MetricsLogger
 from evaluator import Evaluator
 from dummy_agents import RandomAgent, ScriptedKuhnPokerAgent
 import argparse
+import random
+import numpy as np
 
 def main():
+    # Set seeds
+    torch.manual_seed(args.seed)
+    random.seed(args.seed)
+    np.random.seed(args.seed)
+    
     print(f"=== Generalized LLM MARL: {args.algo} on {args.backend.upper()} ({args.env}) ===")
     
     # env initialization is now handled dynamically in self_play.py for vectorized rollouts
@@ -74,7 +83,7 @@ def main():
         "backend": args.backend,
         "algorithm": args.algo,
         "regime": args.regime,
-        "seed": 42, # Mocking seed for now
+        "seed": args.seed,
         "use_wandb": True
     }
     logger = MetricsLogger(config=config_dict)
@@ -88,7 +97,7 @@ def main():
     print(f"Initializing Opponent Manager for Regime {args.regime}...")
     opponent_manager = OpponentManager(regime=args.regime, learning_agent=agent, checkpoint_dir=f"checkpoints_pool_{args.algo.lower()}")
     
-    num_iterations = 1000 # Overall training loops (Raised to force plasticity loss)
+    num_iterations = args.iterations
     # 32 concurrent games running in parallel (saturating the GPU during rollout)
     num_envs = args.num_envs
     batch_size = args.batch_size # Larger batch size for stable gradients
@@ -196,7 +205,14 @@ def main():
             if opponent_manager.historical_pool:
                 import random
                 hist_ckpt = random.choice(opponent_manager.historical_pool)
-                opponent_manager.shell_opponent.model.load_state_dict(torch.load(hist_ckpt))
+                ckpt = torch.load(hist_ckpt, weights_only=True)
+                mapped_ckpt = {}
+                for k, v in ckpt.items():
+                    if not k.startswith("v_head.") and not k.startswith("pretrained_model."):
+                        mapped_ckpt[f"pretrained_model.{k}"] = v
+                    else:
+                        mapped_ckpt[k] = v
+                opponent_manager.shell_opponent.model.load_state_dict(mapped_ckpt)
                 hist_metrics = evaluator.evaluate_matchup(agent, opponent_manager.shell_opponent, f"Historical ({hist_ckpt})")
                 logger.log_evaluation(iteration, "historical", hist_metrics)
                 

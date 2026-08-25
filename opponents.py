@@ -56,7 +56,16 @@ class OpponentManager:
                 self.batch_opponent = self.learning_agent
             else:
                 ckpt_path = random.choice(self.historical_pool)
-                self.shell_opponent.model.load_state_dict(torch.load(ckpt_path))
+                ckpt = torch.load(ckpt_path, weights_only=True)
+                # TRL's AutoModelForCausalLMWithValueHead strips 'pretrained_model.' prefix on save
+                # but expects it on load_state_dict. We remap it here.
+                mapped_ckpt = {}
+                for k, v in ckpt.items():
+                    if not k.startswith("v_head.") and not k.startswith("pretrained_model."):
+                        mapped_ckpt[f"pretrained_model.{k}"] = v
+                    else:
+                        mapped_ckpt[k] = v
+                self.shell_opponent.model.load_state_dict(mapped_ckpt)
                 self.batch_opponent = self.shell_opponent
                 
     def get_opponent(self):
