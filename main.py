@@ -27,9 +27,10 @@ def main():
     num_iterations = 100 # Overall training loops
     episodes_per_iteration = 10 # Collect 10 games before trying to train
     
+    all_trajectories = []
+    
     for iteration in range(num_iterations):
         print(f"\n========== Training Iteration {iteration+1}/{num_iterations} ==========")
-        all_trajectories = []
         
         # 1. Collect phase
         for episode in range(episodes_per_iteration):
@@ -57,8 +58,15 @@ def main():
             print(f"Plasticity Metrics:")
             print(f"  - Feature Variance: {stats.get('plasticity/feature_variance', 'N/A')}")
             print(f"  - Dormant Neurons (%): {stats.get('plasticity/dormant_neurons_pct', 'N/A')}")
+            
+            # Keep leftovers for the next iteration
+            remainder = len(all_trajectories) % batch_size
+            if remainder > 0:
+                all_trajectories = all_trajectories[-remainder:]
+            else:
+                all_trajectories = []
         else:
-            print(f"Not enough trajectories ({len(all_trajectories)}) for a batch ({batch_size}). Skipping update.")
+            print(f"Not enough trajectories ({len(all_trajectories)}) for a batch ({batch_size}). Accumulating...")
 
 if __name__ == "__main__":
     main()
