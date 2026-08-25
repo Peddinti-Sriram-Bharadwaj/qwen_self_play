@@ -17,36 +17,6 @@ class Evaluator:
         # We run the self-play rollout loop but without returning gradients.
         # collect_batched_self_play_trajectories will play out full games.
         # We need to compute win rate from the info dicts of the final trajectories.
-        trajectories = collect_batched_self_play_trajectories(self.num_envs, learning_agent, opponent_agent, self.storage, self.llm_env)
+        trajectories, game_metrics = collect_batched_self_play_trajectories(self.num_envs, learning_agent, opponent_agent, self.storage, self.llm_env)
         
-        # Analyze trajectories to get metrics
-        player_0_wins = 0
-        player_1_wins = 0
-        draws = 0
-        invalid_actions = 0
-        total_games = len(trajectories)
-        
-        if total_games == 0:
-            return {"p0_win_rate": 0.0, "p1_win_rate": 0.0, "draw_rate": 0.0, "invalid_action_rate": 0.0}
-            
-        for traj in trajectories:
-            reward = traj.get('reward', 0.0)
-            info = traj.get('info', {})
-            
-            # Simple heuristic based on reward sign (assuming zero-sum)
-            if reward > 0:
-                player_0_wins += 1
-            elif reward < 0:
-                if info.get('msg', '').startswith('Illegal') or info.get('msg', '').startswith('Invalid'):
-                    invalid_actions += 1
-                player_1_wins += 1
-            else:
-                draws += 1
-                
-        metrics = {
-            "p0_win_rate": player_0_wins / total_games,
-            "p1_win_rate": player_1_wins / total_games,
-            "draw_rate": draws / total_games,
-            "invalid_action_rate": invalid_actions / total_games,
-        }
-        return metrics
+        return game_metrics
