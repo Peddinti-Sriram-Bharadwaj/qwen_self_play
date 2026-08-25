@@ -67,6 +67,16 @@ def main():
                 all_trajectories = []
         else:
             print(f"Not enough trajectories ({len(all_trajectories)}) for a batch ({batch_size}). Accumulating...")
+            
+        # 3. Checkpointing (for Safety Frontier Evaluation)
+        if (iteration + 1) % 10 == 0:
+            import os
+            checkpoint_dir = f"checkpoints/iter_{iteration+1}"
+            os.makedirs(checkpoint_dir, exist_ok=True)
+            print(f"Saving model checkpoint to {checkpoint_dir}...")
+            # We save the active policy model
+            agent.model.pretrained_model.save_pretrained(checkpoint_dir)
+            agent.tokenizer.save_pretrained(checkpoint_dir)
 
 if __name__ == "__main__":
     main()
