@@ -130,7 +130,6 @@ def main():
             
             for b in range(num_batches):
                 if regime_c_warmed_up:
-                    import random
                     # Sample uniformly from the high replay buffer
                     batch = random.sample(replay_buffer, batch_size)
                 else:
@@ -203,7 +202,6 @@ def main():
             
             # Evaluate against Historical (if any exist)
             if opponent_manager.historical_pool:
-                import random
                 hist_ckpt = random.choice(opponent_manager.historical_pool)
                 ckpt = torch.load(hist_ckpt, weights_only=True)
                 mapped_ckpt = {}
