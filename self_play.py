@@ -51,4 +51,22 @@ def collect_self_play_trajectory(env: TicTacToeEnv, agent1: Agent, agent2: Agent
     if render:
         print(f"Episode finished. Info: {info}")
         
+    # --- Episodic Credit Assignment ---
+    # TRL's PPO step treats each query-response pair independently. 
+    # To learn strategy, all moves in a winning game must be rewarded, and all moves in a losing game penalized.
+    
+    # If the game ended due to a valid terminal state (win/draw)
+    if "winner" in info:
+        winner = info["winner"]
+        for step in trajectory:
+            if winner is None:
+                step['reward'] = torch.tensor(0.0, dtype=torch.float32) # Draw
+            elif step['player'] == winner:
+                step['reward'] = torch.tensor(1.0, dtype=torch.float32) # Win
+            else:
+                step['reward'] = torch.tensor(-1.0, dtype=torch.float32) # Loss
+                
+    # If the game ended due to an invalid move, the last step already has -10.0.
+    # We optionally penalize all previous moves by that player too, but usually just penalizing the mistake is enough.
+        
     return trajectory
