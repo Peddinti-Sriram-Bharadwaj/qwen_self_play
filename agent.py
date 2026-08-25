@@ -12,6 +12,7 @@ class Agent(ABC):
         - action (int): The parsed action for the environment.
         - query_tensor (torch.Tensor): The tokenized observation.
         - response_tensor (torch.Tensor): The tokenized generation (just the action tokens).
+        - cot_latents (torch.Tensor): The hidden states of the generated CoT tokens.
         """
         pass
     
@@ -43,9 +44,9 @@ class LocalLLMAgent(Agent):
 
     def act(self, observation: str):
         self.model.eval()
-        # Prompt model to just output the number
+        # Prompt model for Chain of Thought
         messages = [
-            {"role": "system", "content": "You are playing a game of Tic-Tac-Toe. Respond with only a single digit corresponding to your chosen move (0-8)."},
+            {"role": "system", "content": "You are playing a game of Tic-Tac-Toe. Think step by step. Write your thoughts, then output 'Action: X' where X is your final chosen move (a single digit 0-8)."},
             {"role": "user", "content": observation}
         ]
         prompt = self.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
@@ -56,22 +57,38 @@ class LocalLLMAgent(Agent):
         with torch.no_grad():
             outputs = self.model.generate(
                 **inputs, 
-                max_new_tokens=3, 
+                max_new_tokens=40, # Increased for CoT
                 do_sample=True, 
                 temperature=0.7,
-                pad_token_id=self.tokenizer.pad_token_id
+                pad_token_id=self.tokenizer.pad_token_id,
+                output_hidden_states=True,
+                return_dict_in_generate=True
             )
         
         # The generated output contains the prompt + response. TRL needs just the response.
-        response_tensor = outputs[0][len(query_tensor):]
+        sequences = outputs.sequences
+        response_tensor = sequences[0][len(query_tensor):]
         response_text = self.tokenizer.decode(response_tensor, skip_special_tokens=True)
         
-        # Extract first digit found
-        match = re.search(r'\d', response_text)
-        if match:
-            action = int(match.group())
+        # Extract the hidden states of the generated CoT tokens
+        cot_latents_list = []
+        if hasattr(outputs, 'hidden_states') and outputs.hidden_states is not None:
+            for step_hidden_states in outputs.hidden_states:
+                # step_hidden_states[-1] is the last layer. shape: (1, 1, hidden_dim)
+                cot_latents_list.append(step_hidden_states[-1][0, 0, :])
+                
+        if cot_latents_list:
+            cot_latents = torch.stack(cot_latents_list) # shape: (seq_len, hidden_dim)
         else:
-            # Fallback random valid move or invalid move signal
-            action = -1
+            cot_latents = torch.empty(0)
+        
+        # Extract action digit from CoT response
+        match = re.search(r'Action:\s*(\d)', response_text)
+        if match:
+            action = int(match.group(1))
+        else:
+            # Fallback
+            fallback_match = re.search(r'\d', response_text)
+            action = int(fallback_match.group()) if fallback_match else -1
             
-        return action, query_tensor.cpu(), response_tensor.cpu()
+        return action, query_tensor.cpu(), response_tensor.cpu(), cot_latents.cpu()

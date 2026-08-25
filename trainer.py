@@ -25,6 +25,38 @@ class TRLTrainer:
             tokenizer=self.agent.tokenizer
         )
 
+    def measure_plasticity(self, queries):
+        """
+        Measures the plasticity of the model based on the current batch of queries.
+        Metrics:
+        1. Latent Variance: Drop in variance indicates representation collapse (feature rank loss).
+        2. Dormant Neurons: Percentage of neurons that do not activate/vary across the batch.
+        """
+        self.agent.model.eval()
+        with torch.no_grad():
+            input_ids = torch.nn.utils.rnn.pad_sequence(
+                queries, batch_first=True, padding_value=self.agent.tokenizer.pad_token_id
+            ).to(self.agent.device)
+            
+            # Use the underlying HuggingFace model to get hidden states
+            outputs = self.agent.model.pretrained_model(input_ids, output_hidden_states=True)
+            # Extract last layer hidden states for the last token
+            last_hidden = outputs.hidden_states[-1][:, -1, :].to(torch.float32) # (batch, hidden)
+            
+            # Variance across the batch for each neuron
+            neuron_variance = torch.var(last_hidden, dim=0)
+            
+            # Feature Variance (proxy for rank collapse)
+            feature_variance = neuron_variance.mean().item()
+            
+            # Dormant Neurons
+            tolerance = 1e-5
+            dormant_neurons = (neuron_variance < tolerance).sum().item()
+            total_neurons = last_hidden.shape[-1]
+            dormant_percentage = (dormant_neurons / total_neurons) * 100
+            
+        return feature_variance, dormant_percentage
+
     def update(self, trajectories):
         """
         Extracts queries, responses, and rewards from the trajectories and performs a PPO step.
@@ -41,8 +73,15 @@ class TRLTrainer:
         if len(queries) == 0:
             return {}
             
+        # Measure plasticity before update
+        feat_var, dormant_pct = self.measure_plasticity(queries)
+            
         # PPO step
         stats = self.ppo_trainer.step(queries, responses, rewards)
+        
+        # Inject our plasticity metrics into the stats
+        stats['plasticity/feature_variance'] = feat_var
+        stats['plasticity/dormant_neurons_pct'] = dormant_pct
         
         print(f"Performed TRL PPO update on {len(queries)} steps.")
         return stats

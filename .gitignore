@@ -50,3 +50,4 @@ checkpoints/
 .idea/
 .vscode/
 *.swp
+latents/

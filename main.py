@@ -2,6 +2,7 @@ import torch
 from environment import TicTacToeEnv
 from agent import LocalLLMAgent
 from self_play import collect_self_play_trajectory
+from storage import TrajectoryStorage
 from trainer import TRLTrainer
 
 def main():
@@ -20,13 +21,16 @@ def main():
     print("Initializing TRL PPOTrainer...")
     trainer = TRLTrainer(agent)
     
+    print("Initializing Trajectory Storage...")
+    storage = TrajectoryStorage(base_dir="latents")
+    
     num_episodes = 2
     all_trajectories = []
     
     # 1. Collect phase
     for episode in range(num_episodes):
         print(f"\n--- Episode {episode+1}/{num_episodes} ---")
-        trajectory = collect_self_play_trajectory(env, agent, agent, render=True)
+        trajectory = collect_self_play_trajectory(env, agent, agent, storage, render=True)
         all_trajectories.extend(trajectory)
         print(f"Collected trajectory of length {len(trajectory)}.")
         
@@ -49,6 +53,9 @@ def main():
         print(f"  - Value Loss: {stats.get('ppo/loss/value', 'N/A')}")
         print(f"  - KL Divergence: {stats.get('objective/kl', 'N/A')}")
         print(f"  - Return: {stats.get('ppo/returns/mean', 'N/A')}")
+        print(f"Plasticity Metrics:")
+        print(f"  - Feature Variance: {stats.get('plasticity/feature_variance', 'N/A')}")
+        print(f"  - Dormant Neurons (%): {stats.get('plasticity/dormant_neurons_pct', 'N/A')}")
     else:
         print("Not enough trajectories collected for a batch update.")
 
