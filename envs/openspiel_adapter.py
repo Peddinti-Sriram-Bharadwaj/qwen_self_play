@@ -18,7 +18,7 @@ class OpenSpielAdapter(LLMEnvironment):
         self.game = pyspiel.load_game(game_name)
         self.state = self.game.new_initial_state()
         
-    def reset(self, player_id: int = 1) -> str:
+    def reset(self, player_id: int = 1) -> Tuple[str, int]:
         self.state = self.game.new_initial_state()
         
         # Handle chance nodes (e.g. dealing cards)
@@ -30,19 +30,19 @@ class OpenSpielAdapter(LLMEnvironment):
             action = random.choices(action_list, weights=prob_list)[0]
             self.state.apply_action(action)
             
-        return self._render_observation()
+        return self._render_observation(), self.state.current_player()
 
-    def step(self, text_action: str) -> Tuple[str, float, bool, dict]:
+    def step(self, text_action: str) -> Tuple[str, float, bool, dict, int]:
         parsed_action = self._parse_action(text_action)
         
         if parsed_action is None:
-            return "INVALID", -10.0, True, {"msg": "Invalid action format."}
+            return "INVALID", -10.0, True, {"msg": "Invalid action format."}, self.state.current_player()
             
         # Apply the discrete action to the OpenSpiel state engine
         try:
             self.state.apply_action(parsed_action)
         except Exception as e:
-            return "INVALID", -10.0, True, {"msg": f"Illegal action. {e}"}
+            return "INVALID", -10.0, True, {"msg": f"Illegal action. {e}"}, self.state.current_player()
             
         # Handle intermediate chance nodes (e.g. dealing next street of cards)
         while self.state.is_chance_node() and not self.state.is_terminal():
@@ -61,9 +61,9 @@ class OpenSpielAdapter(LLMEnvironment):
             # In OpenSpiel, returns() gives a list of rewards for each player [r0, r1]
             # Since this is a scaffold, we return Player 0's reward
             reward = rewards[0]
-            return "Game Over.", reward, done, {"returns": rewards}
+            return "Game Over.", reward, done, {"returns": rewards}, self.state.current_player()
         else:
-            return self._render_observation(), 0.0, False, {}
+            return self._render_observation(), 0.0, False, {}, self.state.current_player()
 
     def _parse_action(self, text_response: str) -> Optional[int]:
         """
