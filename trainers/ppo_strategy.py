@@ -10,8 +10,8 @@ class PPOStrategy(TrainerStrategy):
         # PPO Configuration
         config = PPOConfig(
             learning_rate=1e-5,          # Low LR to prevent destroying the pretrained weights
-            batch_size=32,               # Larger batch size for stable gradients
-            mini_batch_size=8,           # Must divide batch_size
+            batch_size=256,              # Larger batch size for stable gradients (Matches main.py default)
+            mini_batch_size=32,          # Must divide batch_size
             gradient_accumulation_steps=1,
             ppo_epochs=4,                # Number of optimisation epochs per batch
             init_kl_coef=0.1,            # KL penalty to keep the model producing valid text
@@ -47,9 +47,10 @@ class PPOStrategy(TrainerStrategy):
         """
         self.agent.model.eval()
         with torch.no_grad():
+            device = self.agent.model.pretrained_model.device
             input_ids = torch.nn.utils.rnn.pad_sequence(
                 queries, batch_first=True, padding_value=self.agent.tokenizer.pad_token_id
-            ).to(self.agent.device)
+            ).to(device)
             
             # Use the underlying HuggingFace model to get hidden states
             outputs = self.agent.model.pretrained_model(input_ids, output_hidden_states=True)

@@ -8,6 +8,8 @@ parser.add_argument("--env", type=str, default="TicTacToe-v0", help="The name of
 parser.add_argument("--backend", type=str, default="textarena", choices=["textarena", "openspiel", "pettingzoo", "jaxmarl"], help="The environment suite backend")
 parser.add_argument("--llm-gpu", type=int, default=0, help="GPU ID for the LLM")
 parser.add_argument("--env-gpu", type=int, default=1, help="GPU ID for JaxMARL")
+parser.add_argument("--batch-size", type=int, default=256, help="Global batch size for RL updates")
+parser.add_argument("--num-envs", type=int, default=32, help="Number of parallel environments to run during collection")
 args = parser.parse_args()
 
 # Disable JAX preallocation immediately so it doesn't crash PyTorch LLMs
@@ -63,10 +65,10 @@ def main():
     print("Initializing Trajectory Storage...")
     storage = TrajectoryStorage(base_dir=f"latents_{args.algo.lower()}_{args.env.replace('-', '_')}")
     
-    num_iterations = 500 # Overall training loops (Raised to force plasticity loss)
-    # 32 concurrent games running in parallel (saturating the GPU)
-    num_envs = 32
-    batch_size = 32 # Common batch size across algos
+    num_iterations = 1000 # Overall training loops (Raised to force plasticity loss)
+    # 32 concurrent games running in parallel (saturating the GPU during rollout)
+    num_envs = args.num_envs
+    batch_size = args.batch_size # Larger batch size for stable gradients
     
     all_trajectories = []
     

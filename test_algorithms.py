@@ -51,7 +51,7 @@ def main():
         print("Falling back to gpt2...")
         agent = LocalLLMAgent(model_name="gpt2", device="cpu")
         
-    batch = create_mock_batch(agent, batch_size=32, seq_len=15)
+    batch = create_mock_batch(agent, batch_size=256, seq_len=15)
     
     algorithms = {
         "REINFORCE": ReinforceStrategy,
