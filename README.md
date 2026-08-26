@@ -12,11 +12,11 @@ Please switch to the relevant branch for your research:
 
 * **[multi-algo-comparison](https://github.com/Peddinti-Sriram-Bharadwaj/qwen_self_play/tree/multi-algo-comparison)**
   * **Status:** 🟢 Active Development / Stable
-  * **Contents:** The cutting-edge unified MARL framework. Contains cross-framework adapters for `TextArena`, `OpenSpiel`, `PettingZoo`, and `JaxMARL`. Implements actual PyTorch white-box RL optimization for `REINFORCE`, `REINFORCE++`, `DAPO`, and `GRPO`. Supports dual-GPU hardware partitioning for heavy models.
+  * **Contents:** A unified MARL framework. Contains cross-framework adapters for `TextArena`, `OpenSpiel`, `PettingZoo`, and `JaxMARL`. Implements PyTorch white-box RL optimization for `REINFORCE`, `REINFORCE++`, `DAPO`, and `GRPO`. Supports dual-GPU hardware partitioning for distributed execution.
 
 * **[cot-plasticity-research](https://github.com/Peddinti-Sriram-Bharadwaj/qwen_self_play/tree/cot-plasticity-research)**
   * **Status:** 🟡 Experimental / Baseline
-  * **Contents:** The foundational scaffolding for measuring plasticity collapse. Contains the core logic for extracting CoT latents, tracking feature variance, and calculating dormant neuron percentages during the batched generation loop.
+  * **Contents:** The baseline implementation for measuring plasticity collapse. Contains the core logic for extracting CoT latents, tracking feature variance, and calculating dormant neuron percentages during the batched generation loop.
 
 ## ⚙️ Quick Start
 
