@@ -89,7 +89,7 @@ def main():
     llm_env = EnvFactory.get_env(backend=args.backend, env_name=args.env)
     
     print(f"Initializing Evaluator...")
-    evaluator = Evaluator(llm_env=llm_env, storage=TrajectoryStorage(base_dir=f"latents_eval_{args.algo.lower()}"), num_envs=500)
+    evaluator = Evaluator(llm_env=llm_env, storage=TrajectoryStorage(base_dir=f"latents_eval_{args.algo.lower()}"), num_envs=args.num_envs)
     
     print(f"Initializing Metrics Logger...")
     # We use a simple config dict for the logger
