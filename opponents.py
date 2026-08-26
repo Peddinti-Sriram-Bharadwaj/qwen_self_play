@@ -19,15 +19,14 @@ class OpponentManager:
         self.batch_opponent = None
         self.save_schedule = [100, 200, 400, 600, 800, 1000, 1200, 1400, 1600, 1800, 2000]
         
-        if self.regime in ["A", "D"]:
-            print(f"Initializing Opponent Shell (Regime {self.regime})...")
-            # Extract the huggingface model path
-            model_name = getattr(self.learning_agent.model.config, "_name_or_path", "Qwen/Qwen2.5-0.5B-Instruct")
-            self.shell_opponent = LocalLLMAgent(model_name=model_name, device=self.learning_agent.device)
-            self.shell_opponent.model.eval()
-            self.shell_opponent.model.requires_grad_(False)
-            
-            if self.regime == "D":
+        print(f"Initializing Opponent Shell (Frozen Base Policy)...")
+        # Extract the huggingface model path
+        model_name = getattr(self.learning_agent.model.config, "_name_or_path", "Qwen/Qwen2.5-0.5B-Instruct")
+        self.shell_opponent = LocalLLMAgent(model_name=model_name, device=self.learning_agent.device)
+        self.shell_opponent.model.eval()
+        self.shell_opponent.model.requires_grad_(False)
+        
+        if self.regime == "D":
                 # Save the frozen base immediately to the historical pool (checkpoint_0)
                 self.save_checkpoint(0, force=True)
             
