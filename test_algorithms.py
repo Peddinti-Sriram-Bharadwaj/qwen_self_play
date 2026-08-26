@@ -10,10 +10,10 @@ def create_mock_batch(agent, batch_size=2, seq_len=10):
     """Creates a mock batch of data that collect_data() would normally output."""
     batch = []
     for _ in range(batch_size):
-        # Create dummy tokenized queries and responses
+        # Create mock tokenized queries and responses
         query = torch.randint(0, agent.tokenizer.vocab_size, (seq_len,))
         response = torch.randint(0, agent.tokenizer.vocab_size, (seq_len,))
-        reward = torch.tensor(1.0) # Dummy reward
+        reward = torch.tensor(1.0) # Mock reward
         
         step_data = {
             'query': query,
@@ -43,7 +43,7 @@ def test_algorithm(algo_name, strategy_class, agent, batch):
         return False
 
 def main():
-    print("Initializing dummy agent for testing shapes...")
+    print("Initializing mock agent for testing shapes...")
     # Using a tiny model to make local testing fast and avoid OOMs
     try:
         agent = LocalLLMAgent(model_name="sshleifer/tiny-gpt2", device="cpu")

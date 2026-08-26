@@ -33,7 +33,7 @@ chmod +x install.sh
 
 ## 🧪 Health Check
 
-Before spinning up a massive training run, verify all your C++ and JAX dependencies are working properly:
+Before initiating a distributed training run, verify all C++ and JAX dependencies are working properly:
 ```bash
 conda activate rl_sim
 python health_check.py

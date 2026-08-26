@@ -36,7 +36,7 @@ class GRPOStrategy(TrainerStrategy):
         # 3. advantage = (reward - mean) / std
         # 4. policy_loss = - (ratio * advantage) + KL_penalty
         
-        print(f"Performed GRPO update on {len(batch)} steps. (Scaffolding)")
+        print(f"Performed GRPO step (Stub) on {len(batch)} steps.")
         
         return {
             "grpo/loss/policy": 0.0,

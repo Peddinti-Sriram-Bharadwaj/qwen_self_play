@@ -20,7 +20,7 @@ class PettingZooAdapter(LLMEnvironment):
         elif game_name == "connect_four_v3":
             self.env = connect_four_v3.env()
         else:
-            raise ValueError(f"PettingZoo environment {game_name} not yet scaffolded in this adapter.")
+            raise ValueError(f"PettingZoo environment {game_name} not yet implemented in this adapter.")
             
     def reset(self, player_id: int = 1) -> str:
         self.env.reset()
