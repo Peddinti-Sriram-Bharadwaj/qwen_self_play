@@ -8,9 +8,10 @@ class DAPOStrategy(TrainerStrategy):
     DAPO-like Strategy.
     Useful for sampling, clipping, and entropy-preservation improvements.
     """
-    def __init__(self, agent):
+    def __init__(self, agent, lr: float = 1e-5, beta: float = 0.1, **kwargs):
         self.agent = agent
-        self.optimizer = torch.optim.Adam(self.agent.model.parameters(), lr=1e-5)
+        self.optimizer = torch.optim.Adam(self.agent.model.parameters(), lr=lr)
+        self.beta = beta
 
     def collect_data(self, num_envs: int, storage, llm_env, opponent_agent) -> list:
         trajectories, game_metrics = collect_batched_self_play_trajectories(num_envs, self.agent, opponent_agent, storage, llm_env)
@@ -44,7 +45,7 @@ class DAPOStrategy(TrainerStrategy):
         total_log_prob = 0.0
         total_entropy = 0.0
         clip_ratio = 0.2
-        beta = 0.1 # Entropy penalty coefficient
+        beta = self.beta # Configurable entropy penalty coefficient
         
         for i in range(len(batch)):
             log_prob = compute_sequence_logprobs(self.agent.model, queries[i], responses[i], pad_token_id)

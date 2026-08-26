@@ -13,6 +13,8 @@ parser.add_argument("--num-envs", type=int, default=32, help="Number of parallel
 parser.add_argument("--regime", type=str, default="B", choices=["A", "B", "C", "D"], help="Self-Play Regime (A: Fixed, B: Evolving, C: High Replay, D: League)")
 parser.add_argument("--iterations", type=int, default=1000, help="Number of training iterations")
 parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
+parser.add_argument("--lr", type=float, default=1e-5, help="Learning rate")
+parser.add_argument("--beta", type=float, default=0.1, help="Entropy penalty coefficient")
 args = parser.parse_args()
 
 # Disable JAX preallocation immediately so it doesn't crash PyTorch LLMs
@@ -89,7 +91,7 @@ def main():
     logger = MetricsLogger(config=config_dict)
     
     print(f"Initializing {args.algo} Trainer via Factory...")
-    trainer = TrainerFactory.get_trainer(args.algo, agent)
+    trainer = TrainerFactory.get_trainer(args.algo, agent, lr=args.lr, beta=args.beta)
     
     print("Initializing Trajectory Storage...")
     storage = TrajectoryStorage(base_dir=f"latents_{args.algo.lower()}_{args.env.replace('-', '_')}")
