@@ -54,7 +54,7 @@ class JaxMARLAdapter(LLMEnvironment):
             return "INVALID", -10.0, True, {"msg": "Invalid action format."}
             
         # JaxMARL step expects a dictionary of actions for all agents (parallel env)
-        # We simulate dummy action (0) for other agents since we only parse for our agent
+        # We simulate placeholder action (0) for other agents since we only parse for our agent
         actions = {}
         for agent in self.env.agents:
             if agent == self.agent_name:

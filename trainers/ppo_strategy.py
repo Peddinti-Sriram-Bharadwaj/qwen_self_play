@@ -9,7 +9,7 @@ class PPOStrategy(TrainerStrategy):
         
         # PPO Configuration
         config = PPOConfig(
-            learning_rate=1e-5,          # Low LR to prevent destroying the pretrained weights
+            learning_rate=1e-5,          # Low LR to prevent degrading the pretrained weights
             batch_size=256,              # Larger batch size for stable gradients (Matches main.py default)
             mini_batch_size=32,          # Must divide batch_size
             gradient_accumulation_steps=1,

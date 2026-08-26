@@ -8,7 +8,7 @@ def main():
     
     algos = ["PPO", "GRPO", "DPO", "KTO"]
     
-    # Scaffolding for parsing the logs
+    # Note: Requires parsing of standard output logs to generate plots.
     for algo in algos:
         log_file = f"training_{algo}.log"
         if os.path.exists(log_file):
@@ -17,7 +17,7 @@ def main():
         else:
             print(f"Logs for {algo} not found. Run training with --algo {algo} first.")
             
-    print("\n[Scaffolding] Matplotlib plot generated at plasticity_comparison.png")
+    print("\n[Log Plotter] Matplotlib plot stub generated at plasticity_comparison.png")
 
 if __name__ == "__main__":
     main()

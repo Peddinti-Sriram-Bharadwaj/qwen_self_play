@@ -2,9 +2,9 @@
 
 A scalable, multi-algorithm reinforcement learning framework for training large language models (LLMs) like Qwen via self-play in diverse multi-agent environments. 
 
-This branch (`multi-algo-comparison`) features a full suite of **online RL algorithms** and **game-specific adapters** capable of running cross-device (e.g., Apple Silicon for debugging, Dual A1000/A6000 for training).
+This branch (`opponent-regimes`) explores experimental self-play regimes designed to measure representation collapse in multi-agent learning environments.
 
-## 🚀 Features
+## Features
 
 * **LLM Environment Adapters**: Bridges numerical arrays to text prompts for LLMs using the `[ACTION: <move>]` grammar.
   * **TextArena**: Tic-Tac-Toe, Kuhn Poker, Negotiation, etc.
@@ -25,7 +25,7 @@ We provide an automated setup script (`install.sh`) that works on both macOS (MP
 ```bash
 git clone https://github.com/Peddinti-Sriram-Bharadwaj/qwen_self_play.git
 cd qwen_self_play
-git checkout multi-algo-comparison
+git checkout opponent-regimes
 
 chmod +x install.sh
 ./install.sh
@@ -33,7 +33,7 @@ chmod +x install.sh
 
 ## 🧪 Health Check
 
-Before spinning up a massive training run, verify all your C++ and JAX dependencies are working properly:
+Before initiating a distributed training run, verify all C++ and JAX dependencies are working properly:
 ```bash
 conda activate rl_sim
 python health_check.py
