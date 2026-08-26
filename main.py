@@ -63,6 +63,19 @@ def main():
     # Assign the LLM explicitly to the correct GPU
     if torch.cuda.is_available():
         device = f"cuda:{args.llm_gpu}"
+        # Graceful GPU memory check
+        try:
+            free_mem, total_mem = torch.cuda.mem_get_info(args.llm_gpu)
+            required_mem = 10 * 1024**3  # Require at least 10 GB free for RL training
+            if free_mem < required_mem:
+                free_gb = free_mem / (1024**3)
+                print(f"ERROR: Insufficient VRAM on GPU {args.llm_gpu}. Only {free_gb:.2f} GB free, but ~10 GB required.")
+                print("Please check your usage or switch to a different GPU (e.g. --llm-gpu 0). Exiting gracefully.")
+                import sys
+                sys.exit(1)
+        except Exception as e:
+            print(f"Warning: Could not verify GPU memory space: {e}")
+            
     elif torch.backends.mps.is_available():
         device = "mps"
     else:
