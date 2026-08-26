@@ -1,69 +1,84 @@
-# Continual RL & Plasticity Collapse in LLM Self-Play
+<div align="center">
+  <h1>Loss of Plasticity in Continual Multi-Agent Reinforcement Learning</h1>
+  <p><strong>Representation Collapse in Large Language Models under Zero-Sum Self-Play</strong></p>
+</div>
 
-This repository investigates representation collapse (loss of plasticity) in Large Language Models (LLMs) when trained via continuous multi-agent self-play. 
+---
 
-It aims to test the hypothesis that shifting task distributions in zero-sum self-play can reduce a network's ability to adapt, characterized by a decrease in feature variance and an increase in dormant neurons. We implement and evaluate several mechanisms, such as experience replay and league training, to mitigate this effect.
+## 🔬 Overview
+This repository serves as the experimental harness for evaluating **Representation Collapse (Loss of Plasticity)** in Large Language Models (LLMs) when trained via continuous multi-agent reinforcement learning (MARL). 
 
-### Citations & Prior Work
-This experimental harness and the implemented plasticity tracking metrics reference the following work:
-1. **[Loss of Plasticity in Continual Deep Reinforcement Learning (Lyle et al.)](https://arxiv.org/abs/2303.07507)** - Evaluates agents losing the ability to learn after cycling through changing tasks due to representation collapse.
-2. **[SPIRAL](https://arxiv.org/abs/2506...)** - Related work on self-play and representation collapse.
+While standard single-agent RL often operates in stationary environments, zero-sum self-play introduces a highly non-stationary target: the opponent is constantly evolving. We hypothesize that this endless cycle of chasing a moving target forces the LLM to aggressively churn its weights, ultimately resulting in a permanent loss of the network's ability to adapt (loss of plasticity). 
 
-## The Core Experiment
+This repository tests this hypothesis on the `Qwen/Qwen2.5-0.5B-Instruct` model in complex imperfect-information games (Leduc Poker) and evaluates mechanisms like Fictitious Self-Play (League Training) and High Replay Buffers to mitigate the collapse.
 
-We evaluate the `Qwen/Qwen2.5-0.5B-Instruct` model on **Kuhn Poker** (via OpenSpiel) under four training regimes. Each regime trains for 2,000 iterations to measure performance and representation stability.
+## 📊 Experimental Regimes
 
-### The 4 Regimes
-1. **Regime A (Fixed Opponent / Base Policy):** The learning agent plays against a frozen, untrained version of itself. This establishes a single-agent baseline for maintaining plasticity on a stationary task.
-2. **Regime B (Evolving Opponent / Current Policy):** Standard self-play. The agent plays against the current version of itself. This evaluates the effect of shifting tasks in self-play on plasticity.
-3. **Regime C (Evolving Opponent + High Replay):** The agent plays against itself but samples off-policy data from a buffer of 50,000 past experiences to stabilize the data distribution.
-4. **Regime D (Historical Opponent Pool / League Training):** Fictitious Self-Play (FSP). The agent plays against randomly selected past versions of itself. This broadens the task distribution without relying on replay buffers.
+To isolate the causes of plasticity collapse, we evaluate four distinct training regimes over 2,000 PPO/DAPO iterations.
 
-### Plasticity Tracking
-We measure the LLM's final-layer hidden states (`cot_latents`) across updates to track two metrics:
-- **Feature Variance:** The variance of the activations. A decrease indicates a potential loss of capacity.
-- **Dormant Neurons:** The percentage of neurons with a mean absolute activation `< 1e-3`.
+```mermaid
+flowchart TD
+    subgraph Control
+    A[Regime A: Fixed Opponent] -->|Stationary Target| A_res(Maintains Plasticity)
+    end
 
-## Installation
+    subgraph The Collapse
+    B[Regime B: Evolving Opponent] -->|Non-Stationary Target| B_res(Catastrophic Forgetting)
+    end
+    
+    subgraph Mitigation Strategies
+    C[Regime C: High Replay Buffer] -->|Stabilizes Distribution| C_res(Delayed Collapse)
+    D[Regime D: League Training / FSP] -->|Samples Historical Opponents| D_res(Preserves Plasticity)
+    end
+```
 
-We provide an automated setup script (`install.sh`) that works on both macOS (MPS) and Linux Servers (CUDA 12.1).
+## 📈 Tracking Plasticity & Collapse
+We measure the degradation of the neural network's capacity by hooking into the LLM's final-layer hidden states during the generation of Chain-of-Thought (CoT) latents. We track three primary metrics:
+
+1. **Feature Variance:** The variance of the activations in the final layer. A crash in feature variance represents a direct loss of representation capacity.
+2. **Dormant Neurons:** The percentage of neurons that die (mean absolute activation `< 1e-3`).
+3. **Policy Entropy:** Monitored to ensure the model does not fall into "Exploration Hacking" (collapsing to a degenerate, safe 0-entropy state). We explicitly force exploration via a $0.0$ entropy penalty and a high learning rate.
+
+*We also track a **Safety Refusal Rate** (Red-Teaming Proxy) to evaluate if plasticity loss strictly correlates with a catastrophic forgetting of the model's pre-trained guardrails.*
+
+## ⚙️ Installation
+
+We provide an automated setup script (`install.sh`) that installs the environment (including OpenSpiel and TRL) for macOS (MPS) and Linux Servers (CUDA).
 
 ```bash
 git clone https://github.com/Peddinti-Sriram-Bharadwaj/qwen_self_play.git
 cd qwen_self_play
-git checkout experimental-harness
 
 chmod +x install.sh
 ./install.sh
 ```
 
-## Running the Main Experiments
+## 🚀 Running the Experiments (ICLR Targeted Runs)
 
-You can execute the main experiment loops (2,000 iterations for 3 seeds each) across all regimes. 
+The following commands execute the primary experimental loop designed to force the plasticity collapse on **Leduc Poker**. We use an aggressive learning rate (`--lr 1e-4`) and zero entropy penalty (`--beta 0.0`) to maximize gradient churn.
 
-> [!TIP]  
-> If you are on a shared server, use `htop -u $USER` to monitor your CPU/RAM usage. If you need to stop your runs safely, use `pkill -u $USER -f main.py`.
-
-Use `nohup` to run these in the background across multiple GPUs:
+> [!TIP]
+> **Server Management:**
+> Use `htop -u $USER` to monitor your RAM/CPU usage. If you are on a shared server, use `nvidia-smi` to find a GPU with at least 15 GB of free VRAM before launching. Ensure you assign the correct GPU via `--llm-gpu <ID>`.
 
 ```bash
-# Regime A: Fixed Opponent (Base Policy)
-nohup conda run --no-capture-output -n rl_sim python -u main.py --algo DAPO --backend openspiel --env kuhn_poker --regime A --iterations 2000 --seed 42 --llm-gpu 0 > run_regime_A_42.log 2>&1 &
-nohup conda run --no-capture-output -n rl_sim python -u main.py --algo DAPO --backend openspiel --env kuhn_poker --regime A --iterations 2000 --seed 43 --llm-gpu 1 > run_regime_A_43.log 2>&1 &
-nohup conda run --no-capture-output -n rl_sim python -u main.py --algo DAPO --backend openspiel --env kuhn_poker --regime A --iterations 2000 --seed 44 --llm-gpu 2 > run_regime_A_44.log 2>&1 &
+# Activate the environment
+conda activate rl_sim
 
-# Regime B: Evolving Opponent (Current Policy)
-nohup conda run --no-capture-output -n rl_sim python -u main.py --algo DAPO --backend openspiel --env kuhn_poker --regime B --iterations 2000 --seed 42 --llm-gpu 0 > run_regime_B_42.log 2>&1 &
-nohup conda run --no-capture-output -n rl_sim python -u main.py --algo DAPO --backend openspiel --env kuhn_poker --regime B --iterations 2000 --seed 43 --llm-gpu 1 > run_regime_B_43.log 2>&1 &
-nohup conda run --no-capture-output -n rl_sim python -u main.py --algo DAPO --backend openspiel --env kuhn_poker --regime B --iterations 2000 --seed 44 --llm-gpu 2 > run_regime_B_44.log 2>&1 &
+# Regime A: Fixed Opponent (Stationary Control Group)
+nohup python -u main.py --algo DAPO --backend openspiel --env leduc_poker --regime A --iterations 2000 --seed 42 --lr 1e-4 --beta 0.0 --llm-gpu 0 > run_regime_A.log 2>&1 &
 
-# Regime C: Evolving Opponent + High Replay (50k buffer)
-nohup conda run --no-capture-output -n rl_sim python -u main.py --algo DAPO --backend openspiel --env kuhn_poker --regime C --iterations 2000 --seed 42 --llm-gpu 0 > run_regime_C_42.log 2>&1 &
-nohup conda run --no-capture-output -n rl_sim python -u main.py --algo DAPO --backend openspiel --env kuhn_poker --regime C --iterations 2000 --seed 43 --llm-gpu 1 > run_regime_C_43.log 2>&1 &
-nohup conda run --no-capture-output -n rl_sim python -u main.py --algo DAPO --backend openspiel --env kuhn_poker --regime C --iterations 2000 --seed 44 --llm-gpu 2 > run_regime_C_44.log 2>&1 &
+# Regime B: Self-Play (The Collapse Group)
+nohup python -u main.py --algo DAPO --backend openspiel --env leduc_poker --regime B --iterations 2000 --seed 42 --lr 1e-4 --beta 0.0 --llm-gpu 0 > run_regime_B.log 2>&1 &
 
-# Regime D: Historical Opponent Pool (League / FSP)
-nohup conda run --no-capture-output -n rl_sim python -u main.py --algo DAPO --backend openspiel --env kuhn_poker --regime D --iterations 2000 --seed 42 --llm-gpu 0 > run_regime_D_42.log 2>&1 &
-nohup conda run --no-capture-output -n rl_sim python -u main.py --algo DAPO --backend openspiel --env kuhn_poker --regime D --iterations 2000 --seed 43 --llm-gpu 1 > run_regime_D_43.log 2>&1 &
-nohup conda run --no-capture-output -n rl_sim python -u main.py --algo DAPO --backend openspiel --env kuhn_poker --regime D --iterations 2000 --seed 44 --llm-gpu 2 > run_regime_D_44.log 2>&1 &
+# Regime D: Historical Opponent Pool (Fictitious Self-Play)
+nohup python -u main.py --algo DAPO --backend openspiel --env leduc_poker --regime D --iterations 2000 --seed 42 --lr 1e-4 --beta 0.0 --llm-gpu 0 > run_regime_D.log 2>&1 &
+
+# Regime C: High Replay Buffer
+nohup python -u main.py --algo DAPO --backend openspiel --env leduc_poker --regime C --iterations 2000 --seed 42 --lr 1e-4 --beta 0.0 --llm-gpu 0 > run_regime_C.log 2>&1 &
 ```
+
+## 📚 Citations & Prior Work
+This experimental harness and the implemented plasticity tracking metrics heavily reference the following prior work:
+1. **Lyle et al. (2023):** *Understanding Plasticity in Neural Networks* ([arXiv:2303.07507](https://arxiv.org/abs/2303.07507)) - Identifies the loss of plasticity when models cycle through changing tasks.
+2. **SPIRAL (2025):** Recent explorations linking representation collapse to continuous self-play in language models.
