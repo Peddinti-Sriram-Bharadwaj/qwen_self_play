@@ -1,6 +1,6 @@
 from trainers.base_strategy import TrainerStrategy
 from self_play import collect_batched_self_play_trajectories
-from trainers.utils import compute_sequence_logprobs, calculate_plasticity_metrics
+from trainers.utils import compute_sequence_logprobs, calculate_plasticity_metrics, compute_policy_entropy
 import torch
 
 class DAPOStrategy(TrainerStrategy):
@@ -42,11 +42,16 @@ class DAPOStrategy(TrainerStrategy):
         
         total_loss_val = 0.0
         total_log_prob = 0.0
+        total_entropy = 0.0
         clip_ratio = 0.2
         beta = 0.1 # Entropy penalty coefficient
         
         for i in range(len(batch)):
             log_prob = compute_sequence_logprobs(self.agent.model, queries[i], responses[i], pad_token_id)
+            
+            # Compute policy entropy for monitoring exploration hacking
+            step_entropy = compute_policy_entropy(self.agent.model, queries[i], pad_token_id)
+            total_entropy += step_entropy
             
             # For a full DAPO, we would maintain a reference model to get ref_log_probs
             # and calculate the probability ratio. Here we use a simplified version:
@@ -80,12 +85,13 @@ class DAPOStrategy(TrainerStrategy):
         win_rate = (rewards > 0).float().mean().item()
         avg_seq_len = sum(len(r) for r in responses) / len(responses)
         avg_log_prob = total_log_prob / len(batch)
+        avg_entropy = total_entropy / len(batch)
         
         # Calculate Plasticity Metrics
         latents_batch = [step['latents'].to(self.agent.device) for step in batch if 'latents' in step]
         plasticity_metrics = calculate_plasticity_metrics(latents_batch)
         
-        print(f"Performed DAPO update on {len(batch)} steps. Loss: {avg_loss:.4f} | Reward: {avg_reward:.2f} | Win Rate: {win_rate:.2f}")
+        print(f"Performed DAPO update on {len(batch)} steps. Loss: {avg_loss:.4f} | Reward: {avg_reward:.2f} | Win Rate: {win_rate:.2f} | Entropy: {avg_entropy:.2f}")
         
         stats = {
             "dapo/loss": avg_loss,
@@ -93,6 +99,7 @@ class DAPOStrategy(TrainerStrategy):
             "dapo/win_rate": win_rate,
             "dapo/avg_seq_len": avg_seq_len,
             "dapo/mean_log_prob": avg_log_prob,
+            "dapo/policy_entropy": avg_entropy,
         }
         stats.update(plasticity_metrics)
         return stats

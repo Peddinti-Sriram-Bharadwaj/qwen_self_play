@@ -1,6 +1,32 @@
 import torch
 import torch.nn.functional as F
 
+def compute_policy_entropy(model, query, pad_token_id):
+    """
+    Computes the mean policy entropy for the next-token distribution over a given query context.
+    A collapse to 0 indicates exploration hacking / deterministic degenerate behavior.
+    """
+    input_ids = query.unsqueeze(0) # Shape: [1, seq_len_q]
+    
+    with torch.no_grad():
+        outputs = model(input_ids)
+        
+        if isinstance(outputs, tuple):
+            logits = outputs[0]
+        else:
+            logits = outputs.logits
+            
+        # We take the logits for the final token to compute the entropy of the next action choice
+        final_logits = logits[0, -1, :] # Shape: [vocab_size]
+        
+        probs = F.softmax(final_logits, dim=-1)
+        log_probs = F.log_softmax(final_logits, dim=-1)
+        
+        # Entropy = - sum(p * log(p))
+        entropy = -(probs * log_probs).sum()
+        
+    return entropy.item()
+
 def compute_sequence_logprobs(model, query, response, pad_token_id):
     """
     Computes the sum of log probabilities for the response tokens, given the query context.
