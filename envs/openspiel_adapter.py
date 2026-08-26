@@ -59,7 +59,7 @@ class OpenSpielAdapter(LLMEnvironment):
             current_player = self.state.current_player()
             # If the game is over, we need the reward for the player who just acted, or all.
             # In OpenSpiel, returns() gives a list of rewards for each player [r0, r1]
-            # Since this is a scaffold, we return Player 0's reward
+            # Return Player 0's reward as the primary signal for single-agent optimization steps
             reward = rewards[0]
             return "Game Over.", reward, done, {"returns": rewards}, self.state.current_player()
         else:

@@ -31,7 +31,7 @@ class GRPOStrategy(TrainerStrategy):
         """
         Calculates group advantages and performs a GRPO step.
         """
-        # TODO: Implement GRPO specific loss:
+        # (Not implemented in this benchmark suite)
         # 1. Group responses by prompt
         # 2. Calculate mean and std of rewards for each group
         # 3. advantage = (reward - mean) / std
@@ -41,7 +41,7 @@ class GRPOStrategy(TrainerStrategy):
         latents_batch = [step['latents'].to(self.agent.device) for step in batch if 'latents' in step]
         plasticity_metrics = calculate_plasticity_metrics(latents_batch)
         
-        print(f"Performed GRPO update on {len(batch)} steps. (Scaffolding)")
+        print(f"Performed GRPO step (Stub) on {len(batch)} steps.")
         
         stats = {
             "grpo/loss/policy": 0.0,
