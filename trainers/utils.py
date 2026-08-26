@@ -40,6 +40,10 @@ def calculate_plasticity_metrics(latents_batch: list[torch.Tensor]) -> dict:
     """
     Computes Feature Variance and Dormant Neurons percentage from a batch of hidden states.
     latents_batch: List of tensors of shape (seq_len, hidden_dim).
+    
+    Citations:
+    - Lyle et al., "Loss of Plasticity in Continual Deep Reinforcement Learning" (https://arxiv.org/abs/2303.07507)
+    - Defines dormant neurons as those with an average absolute activation below a small threshold.
     """
     if not latents_batch:
         return {"plasticity/feature_variance": 0.0, "plasticity/dormant_neurons_pct": 0.0}
