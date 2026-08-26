@@ -35,3 +35,36 @@ def compute_sequence_logprobs(model, query, response, pad_token_id):
     
     # Return the sum of log probabilities for the generated response
     return (token_log_probs * mask).sum()
+
+def calculate_plasticity_metrics(latents_batch: list[torch.Tensor]) -> dict:
+    """
+    Computes Feature Variance and Dormant Neurons percentage from a batch of hidden states.
+    latents_batch: List of tensors of shape (seq_len, hidden_dim).
+    """
+    if not latents_batch:
+        return {"plasticity/feature_variance": 0.0, "plasticity/dormant_neurons_pct": 0.0}
+        
+    # Filter out empty latents
+    valid_latents = [lt for lt in latents_batch if lt.numel() > 0]
+    if not valid_latents:
+        return {"plasticity/feature_variance": 0.0, "plasticity/dormant_neurons_pct": 0.0}
+        
+    # Stack along the sequence/batch dimension -> (total_tokens, hidden_dim)
+    all_latents = torch.cat(valid_latents, dim=0)
+    
+    # 1. Feature Variance: Variance of each neuron across the batch, then averaged over all neurons
+    # If the variance collapses to 0, the network has lost capacity.
+    neuron_variances = all_latents.var(dim=0)
+    mean_feature_variance = neuron_variances.mean().item()
+    
+    # 2. Dormant Neurons (%): Neurons whose average absolute activation across the batch is very close to 0.
+    # We use a threshold of 1e-3.
+    mean_abs_activations = all_latents.abs().mean(dim=0)
+    dormant_threshold = 1e-3
+    dormant_count = (mean_abs_activations < dormant_threshold).sum().item()
+    dormant_pct = (dormant_count / all_latents.shape[-1]) * 100.0
+    
+    return {
+        "plasticity/feature_variance": mean_feature_variance,
+        "plasticity/dormant_neurons_pct": dormant_pct
+    }

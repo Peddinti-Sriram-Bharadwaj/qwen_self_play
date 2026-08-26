@@ -99,7 +99,8 @@ def collect_batched_self_play_trajectories(num_envs: int, agent: Agent, opponent
                     'player': current_player,
                     'query': query_tensors[i],
                     'response': response_tensors[i],
-                    'reward': torch.tensor(reward, dtype=torch.float32)
+                    'reward': torch.tensor(reward, dtype=torch.float32),
+                    'latents': cot_latents_batch[i]
                 })
             
             if done:

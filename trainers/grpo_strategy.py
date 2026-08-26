@@ -1,5 +1,6 @@
 from trainers.base_strategy import TrainerStrategy
 from self_play import collect_batched_self_play_trajectories
+from trainers.utils import calculate_plasticity_metrics
 import torch
 
 class GRPOStrategy(TrainerStrategy):
@@ -36,10 +37,14 @@ class GRPOStrategy(TrainerStrategy):
         # 3. advantage = (reward - mean) / std
         # 4. policy_loss = - (ratio * advantage) + KL_penalty
         
+        # Calculate Plasticity Metrics
+        latents_batch = [step['latents'].to(self.agent.device) for step in batch if 'latents' in step]
+        plasticity_metrics = calculate_plasticity_metrics(latents_batch)
+        
         print(f"Performed GRPO update on {len(batch)} steps. (Scaffolding)")
         
-        return {
+        stats = {
             "grpo/loss/policy": 0.0,
-            "plasticity/feature_variance": 0.0, 
-            "plasticity/dormant_neurons_pct": 0.0
         }
+        stats.update(plasticity_metrics)
+        return stats

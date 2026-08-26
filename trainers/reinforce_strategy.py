@@ -1,6 +1,6 @@
 from trainers.base_strategy import TrainerStrategy
 from self_play import collect_batched_self_play_trajectories
-from trainers.utils import compute_sequence_logprobs
+from trainers.utils import compute_sequence_logprobs, calculate_plasticity_metrics
 import torch
 
 class ReinforceStrategy(TrainerStrategy):
@@ -76,15 +76,19 @@ class ReinforceStrategy(TrainerStrategy):
         avg_seq_len = sum(len(r) for r in responses) / len(responses)
         avg_log_prob = total_log_prob / len(batch)
         
+        # Calculate Plasticity Metrics
+        latents_batch = [step['latents'].to(self.agent.device) for step in batch if 'latents' in step]
+        plasticity_metrics = calculate_plasticity_metrics(latents_batch)
+        
         print(f"Performed REINFORCE update on {len(batch)} steps. Loss: {avg_loss:.4f} | Reward: {avg_reward:.2f} | Win Rate: {win_rate:.2f}")
         
-        return {
+        stats = {
             "reinforce/loss": avg_loss,
             "reinforce/baseline": self.baseline,
             "reinforce/mean_reward": avg_reward,
             "reinforce/win_rate": win_rate,
             "reinforce/avg_seq_len": avg_seq_len,
             "reinforce/mean_log_prob": avg_log_prob,
-            "plasticity/feature_variance": 0.0, 
-            "plasticity/dormant_neurons_pct": 0.0
         }
+        stats.update(plasticity_metrics)
+        return stats
