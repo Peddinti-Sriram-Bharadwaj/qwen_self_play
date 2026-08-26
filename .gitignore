@@ -51,3 +51,4 @@ checkpoints/
 .vscode/
 *.swp
 latents/
+cheatsheet.sh
