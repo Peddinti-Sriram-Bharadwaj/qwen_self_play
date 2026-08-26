@@ -31,7 +31,7 @@ def main():
     
     for iteration in range(num_iterations):
         print(f"\n========== Training Iteration {iteration+1}/{num_iterations} ==========")
-        # 1. Collect phase (Massive parallel generation)
+        # 1. Collect phase (Parallel generation)
         trajectories = collect_batched_self_play_trajectories(num_envs, agent, storage)
         for traj in trajectories:
             all_trajectories.extend(traj)
