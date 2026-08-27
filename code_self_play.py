@@ -202,3 +202,25 @@ Buggy Code:
         # 7. Step the Optimizer
         self.optimizer.step()
         print(f"Step Complete. Fixer Loss: {fixer_loss:.4f} | Generator Loss: {gen_loss:.4f}")
+
+if __name__ == "__main__":
+    print("Initializing Dual LoRA Agent (Qwen2.5-Coder-1.5B)...")
+    agent = DualLoraCodeAgent(model_name="Qwen/Qwen2.5-Coder-1.5B-Instruct")
+    
+    print("Initializing GRPO Self-Play Loop...")
+    loop = GRPOSelfPlayLoop(agent=agent, dataset_path="synthetic_tasks.json", lr=1e-5)
+    
+    print("Starting Anchored Self-Play Training...")
+    # Run for 500 steps as an initial test
+    for step in range(1, 501):
+        loop.run_step(G=4, K=4)
+        
+        # Save checkpoints periodically
+        if step % 50 == 0:
+            print(f"Saving checkpoints at step {step}...")
+            # Save generator adapter
+            agent.set_active_role("generator")
+            agent.model.save_pretrained(f"checkpoints/step_{step}_generator")
+            # Save fixer adapter
+            agent.set_active_role("fixer")
+            agent.model.save_pretrained(f"checkpoints/step_{step}_fixer")
