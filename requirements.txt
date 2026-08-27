@@ -19,3 +19,8 @@ jaxlib
 # Utilities
 colorama
 matplotlib
+pandas
+wandb
+
+# LoRA Adapters for Anchored Self-Play
+peft
