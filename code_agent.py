@@ -53,10 +53,11 @@ class DualLoraCodeAgent:
             raise ValueError("Role must be 'generator' or 'fixer'")
         self.model.set_adapter(role)
         
-    def batched_generate(self, prompts: list, max_tokens=256, temperature=0.7) -> list:
+    def batched_generate(self, prompts: list, adapter_name: str = "generator", max_tokens=256, temperature=0.7) -> list:
         """
-        Generates responses for a batch of prompts using the currently active adapter.
+        Generates responses for a batch of prompts using the specified adapter.
         """
+        self.set_active_role(adapter_name)
         self.model.eval()
         
         inputs = self.tokenizer(prompts, return_tensors="pt", add_special_tokens=False, padding=True).to(self.device)
