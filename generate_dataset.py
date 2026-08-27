@@ -44,10 +44,12 @@ def generate_mbpp_dataset():
         "test": test_split
     }
     
-    with open("synthetic_tasks.json", "w") as f:
+    import os
+    os.makedirs("data", exist_ok=True)
+    with open("data/synthetic_tasks.json", "w") as f:
         json.dump(output, f, indent=4)
         
-    print(f"Successfully generated 'synthetic_tasks.json'!")
+    print(f"Successfully generated 'data/synthetic_tasks.json'!")
     print(f"Breakdown: {len(train_split)} train, {len(val_split)} val, {len(test_split)} test.")
     
 if __name__ == "__main__":

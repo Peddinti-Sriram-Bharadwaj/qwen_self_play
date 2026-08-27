@@ -216,7 +216,7 @@ if __name__ == "__main__":
     agent = DualLoraCodeAgent(model_name="Qwen/Qwen2.5-Coder-1.5B-Instruct")
     
     print("Initializing GRPO Self-Play Loop...")
-    loop = GRPOSelfPlayLoop(agent=agent, dataset_path="synthetic_tasks.json", lr=1e-5)
+    loop = GRPOSelfPlayLoop(agent=agent, dataset_path="data/synthetic_tasks.json", lr=1e-5)
     
     wandb.init(project="anchored_code_self_play", name="qwen1.5b_grpo_run1")
     
