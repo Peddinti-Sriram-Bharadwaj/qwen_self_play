@@ -232,6 +232,8 @@ if __name__ == "__main__":
     parser.add_argument("--run-name", type=str, default="qwen1.5b_anchored_run", help="WandB run name")
     parser.add_argument("--steps", type=int, default=500, help="Number of steps to run")
     parser.add_argument("--gpu", type=str, default="0", help="GPU ID to pin to (sets CUDA_VISIBLE_DEVICES)")
+    parser.add_argument("--K", type=int, default=16, help="Number of fixer samples per bug (higher = smoother charts)")
+    parser.add_argument("--G", type=int, default=4, help="Number of generator samples per task")
     args = parser.parse_args()
 
     print("Initializing Dual LoRA Agent (Qwen2.5-Coder-1.5B)...")
@@ -244,7 +246,7 @@ if __name__ == "__main__":
     
     print("Starting Anchored Self-Play Training...")
     for step in range(1, args.steps + 1):
-        metrics = loop.run_step(G=4, K=4)
+        metrics = loop.run_step(G=args.G, K=args.K)
         if metrics:
             wandb.log(metrics, step=step)
         
