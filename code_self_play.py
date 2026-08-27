@@ -36,7 +36,8 @@ class GRPOSelfPlayLoop:
         # Generator prompt template
         self.gen_prompt = """You are a code bug generator. Here is a correctly working function and its unit tests.
 Your task is to introduce a subtle bug into this function such that it fails the unit tests, but remains syntactically valid Python.
-Output ONLY the buggy Python code block.
+First, reason about how to break the logic step-by-step inside a <think> block.
+Then, output the buggy Python code block.
 
 Problem: {problem}
 Tests: {tests}
@@ -50,7 +51,8 @@ Correct Code:
         # Fixer prompt template
         self.fix_prompt = """You are an expert Python debugger. Here is a problem description, a suite of unit tests, and a buggy implementation.
 Your task is to fix the bug so that all tests pass.
-Output ONLY the corrected Python code block.
+First, reason about the bug and how to fix it step-by-step inside a <think> block.
+Then, output the corrected Python code block.
 
 Problem: {problem}
 Tests: {tests}
