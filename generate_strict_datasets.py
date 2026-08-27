@@ -67,11 +67,17 @@ def generate_datasets():
     
     for item in hep["test"]:
         cat = categorize_task(item['instruction'])
-        # Humanevalpack format: instruction, buggy_solution, test
+        # Humanevalpack format
+        imports = item.get('import', '')
+        declaration = item.get('declaration', '')
+        buggy_body = item.get('buggy_solution', '')
+        
+        full_buggy_code = f"{imports}\n{declaration}{buggy_body}".strip()
+        
         task = {
             "task_id": f"hep_{item['task_id']}",
             "problem": item['instruction'],
-            "buggy_code": item['buggy_solution'],
+            "buggy_code": full_buggy_code,
             "tests": [item['test']] # It usually provides a single large test string block
         }
         if cat == 'A':
