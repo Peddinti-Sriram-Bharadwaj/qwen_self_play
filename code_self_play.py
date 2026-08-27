@@ -1,3 +1,13 @@
+import os
+import sys
+import argparse
+
+# Parse the GPU argument BEFORE importing PyTorch to guarantee strict VRAM isolation
+_parser = argparse.ArgumentParser(add_help=False)
+_parser.add_argument("--gpu", type=str, default="0", help="Pin to a specific GPU (sets CUDA_VISIBLE_DEVICES)")
+_args, _ = _parser.parse_known_args()
+os.environ["CUDA_VISIBLE_DEVICES"] = _args.gpu
+
 import json
 import torch
 import torch.nn.functional as F
@@ -221,6 +231,7 @@ if __name__ == "__main__":
     parser.add_argument("--beta", type=float, default=0.04, help="KL Divergence Penalty (set to 0.0 for unanchored collapse)")
     parser.add_argument("--run-name", type=str, default="qwen1.5b_anchored_run", help="WandB run name")
     parser.add_argument("--steps", type=int, default=500, help="Number of steps to run")
+    parser.add_argument("--gpu", type=str, default="0", help="GPU ID to pin to (sets CUDA_VISIBLE_DEVICES)")
     args = parser.parse_args()
 
     print("Initializing Dual LoRA Agent (Qwen2.5-Coder-1.5B)...")
