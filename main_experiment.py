@@ -20,6 +20,7 @@ def run_experiment():
     parser.add_argument("--run-name", type=str, default="strict_forgetting_eval")
     parser.add_argument("--phase_steps", type=int, default=200, help="Steps per phase")
     parser.add_argument("--eval_freq", type=int, default=100, help="Evaluate every N steps")
+    parser.add_argument("--update_ref_freq", type=int, default=10, help="Sync recent model anchor every N steps")
     parser.add_argument("--K", type=int, default=4)
     parser.add_argument("--G", type=int, default=4)
     # Skip Phase 0 and inject known baseline values directly (useful after a crash recovery)
@@ -82,6 +83,10 @@ def run_experiment():
         if metrics:
             log_metrics(step, "Phase_A", metrics)
 
+        if step % args.update_ref_freq == 0:
+            agent.sync_fixer_ref()
+            agent.sync_generator_ref()
+
         if step % args.eval_freq == 0:
             ckpt_path = f"checkpoints/phaseA_step_{step}_fixer"
             agent.set_active_role("fixer")
@@ -96,6 +101,10 @@ def run_experiment():
         metrics = loop_B.run_step(G=args.G, K=args.K)
         if metrics:
             log_metrics(step, "Phase_B", metrics)
+
+        if step % args.update_ref_freq == 0:
+            agent.sync_fixer_ref()
+            agent.sync_generator_ref()
 
         if step % args.eval_freq == 0:
             ckpt_path = f"checkpoints/phaseB_step_{step}_fixer"

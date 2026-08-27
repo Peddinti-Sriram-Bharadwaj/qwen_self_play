@@ -69,14 +69,20 @@ class GRPOSelfPlayLoop:
             # Extract logprobs only for the generated response
             pi_theta_logprobs = token_logprobs[:, prompt_len-1:]
 
-            # 3. Forward pass: Reference Policy (Base Model)
+            # 3. Forward pass: Reference Policy (Recent Model Anchor)
             with torch.no_grad():
-                with self.agent.model.disable_adapter():
-                    ref_outputs = self.agent.model(seq_ids)
-                    ref_logits = ref_outputs.logits[:, :-1, :]
-                    ref_log_probs = F.log_softmax(ref_logits, dim=-1)
-                    ref_token_logprobs = ref_log_probs.gather(dim=-1, index=target_ids.unsqueeze(-1)).squeeze(-1)
-                    pi_ref_logprobs = ref_token_logprobs[:, prompt_len-1:]
+                # Temporarily switch to the reference adapter
+                ref_adapter_name = adapter_name + "_ref"
+                self.agent.set_active_role(ref_adapter_name)
+                
+                ref_outputs = self.agent.model(seq_ids)
+                ref_logits = ref_outputs.logits[:, :-1, :]
+                ref_log_probs = F.log_softmax(ref_logits, dim=-1)
+                ref_token_logprobs = ref_log_probs.gather(dim=-1, index=target_ids.unsqueeze(-1)).squeeze(-1)
+                pi_ref_logprobs = ref_token_logprobs[:, prompt_len-1:]
+                
+                # Switch back to the active adapter being trained
+                self.agent.set_active_role(adapter_name)
 
             # 4. Compute GRPO PPO-Clip Loss
             ratio = torch.exp(pi_theta_logprobs - pi_ref_logprobs)
