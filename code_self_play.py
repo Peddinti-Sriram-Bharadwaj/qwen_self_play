@@ -136,14 +136,19 @@ Buggy Code:
         print(f"\n--- STEP: Task {task['task_id']} ---")
         
         # 2. Generator phase
-        gen_prompts = [self.gen_prompt.format(
+        gen_prompts_raw = [self.gen_prompt.format(
             problem=task["problem"], 
             tests=tests_str, 
             code=task["correct_code"]
         )] * G
         
+        gen_prompts = []
+        for p in gen_prompts_raw:
+            messages = [{"role": "system", "content": "You are a helpful AI programming assistant."}, {"role": "user", "content": p}]
+            gen_prompts.append(self.agent.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True))
+        
         print("Sampling Generator...")
-        raw_bugs = self.agent.batched_generate(gen_prompts, adapter_name="generator", max_tokens=150)
+        raw_bugs = self.agent.batched_generate(gen_prompts, adapter_name="generator", max_tokens=300)
         parsed_bugs = [extract_python_code(b) for b in raw_bugs]
         
         # Filter for valid bugs
@@ -161,14 +166,19 @@ Buggy Code:
             
         # 3. Fixer Phase
         target_bug = valid_bugs[0] # Pick the first valid bug for the fixer to repair
-        fix_prompts = [self.fix_prompt.format(
+        fix_prompts_raw = [self.fix_prompt.format(
             problem=task["problem"],
             tests=tests_str,
             buggy_code=target_bug
         )] * K
         
+        fix_prompts = []
+        for p in fix_prompts_raw:
+            messages = [{"role": "system", "content": "You are a helpful AI programming assistant."}, {"role": "user", "content": p}]
+            fix_prompts.append(self.agent.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True))
+        
         print("Sampling Fixer...")
-        raw_fixes = self.agent.batched_generate(fix_prompts, adapter_name="fixer", max_tokens=150)
+        raw_fixes = self.agent.batched_generate(fix_prompts, adapter_name="fixer", max_tokens=300)
         parsed_fixes = [extract_python_code(f) for f in raw_fixes]
         
         # Evaluate fixes

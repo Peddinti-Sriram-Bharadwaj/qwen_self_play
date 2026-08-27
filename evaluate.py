@@ -43,16 +43,23 @@ Buggy Code:
     
     for i, task in enumerate(dataset):
         tests_str = "\n".join(task["tests"])
-        prompt = fix_prompt_template.format(
+        raw_prompt = fix_prompt_template.format(
             problem=task["problem"],
             tests=tests_str,
             buggy_code=task["buggy_code"]
         )
         
+        messages = [
+            {"role": "system", "content": "You are a helpful AI programming assistant."},
+            {"role": "user", "content": raw_prompt}
+        ]
+        prompt = agent.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        
         # pass@1 strict evaluation (Temperature 0.0)
         # We generate 1 sample. Since greedy decoding isn't always supported smoothly in all batched implementations,
         # we can use temperature 0.01 to approximate it.
-        raw_fixes = agent.batched_generate([prompt], adapter_name="fixer", max_tokens=256, temperature=0.01)
+        # We also use max_tokens=512 to ensure enough room for the CoT block and the code
+        raw_fixes = agent.batched_generate([prompt], adapter_name="fixer", max_tokens=512, temperature=0.01)
         parsed_fix = extract_python_code(raw_fixes[0])
         
         res = evaluate_code(parsed_fix, task["tests"])
