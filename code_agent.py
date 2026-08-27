@@ -94,8 +94,13 @@ def extract_python_code(text: str) -> str:
     """
     match = re.search(r"```(?:python)?\n(.*?)```", text, re.DOTALL)
     if match:
-        return match.group(1).strip()
-    return text.strip()
+        code = match.group(1).strip()
+    else:
+        code = text.strip()
+        
+    # Remove hallucinated `check(...)` calls that Qwen sometimes memorizes from HumanEval
+    code = re.sub(r"(?m)^check\s*\(.*?\)", "", code)
+    return code
 
 if __name__ == "__main__":
     # Simple compilation check (will only load model if run directly)
