@@ -192,6 +192,14 @@ def run_evaluation(gpu: str, checkpoints_dir: str, wandb_project: str):
                 step = int(ckpt_name.split("step_")[1].split("_")[0])
 
                 print(f"\nLoading adapter from {ckpt_path}...")
+                
+                # Check if the adapter weights actually exist to prevent PEFT from falling back to HF Hub
+                has_bin = os.path.exists(os.path.join(ckpt_path, "adapter_model.bin"))
+                has_safetensors = os.path.exists(os.path.join(ckpt_path, "adapter_model.safetensors"))
+                if not (has_bin or has_safetensors):
+                    print(f"  -> SKIPPED: No adapter_model.bin or .safetensors found in {ckpt_path}")
+                    continue
+
                 # Overwrite the fixer adapter weights with the saved checkpoint
                 agent.model.load_adapter(ckpt_path, adapter_name="fixer")
                 agent.set_active_role("fixer")

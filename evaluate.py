@@ -32,6 +32,13 @@ def evaluate_checkpoint(checkpoint_path, dataset_path, agent=None, model_name=No
         agent = DualLoraCodeAgent(model_name=model_name)
         if checkpoint_path != "base":
             print(f"Loading LoRA weights from {checkpoint_path}...")
+            
+            import os
+            has_bin = os.path.exists(os.path.join(checkpoint_path, "adapter_model.bin"))
+            has_safetensors = os.path.exists(os.path.join(checkpoint_path, "adapter_model.safetensors"))
+            if not (has_bin or has_safetensors):
+                raise FileNotFoundError(f"No adapter_model.bin or .safetensors found in {checkpoint_path}. Ensure it is a valid local PEFT checkpoint.")
+                
             agent.model.load_adapter(checkpoint_path, adapter_name="fixer")
 
     agent.set_active_role("fixer")
