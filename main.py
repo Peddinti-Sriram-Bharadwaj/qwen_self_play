@@ -15,6 +15,10 @@ parser.add_argument("--iterations", type=int, default=1000, help="Number of trai
 parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
 parser.add_argument("--lr", type=float, default=1e-5, help="Learning rate")
 parser.add_argument("--beta", type=float, default=0.1, help="Entropy penalty coefficient")
+parser.add_argument("--run-name", type=str, default="", help="Custom name for WandB logging")
+parser.add_argument("--model-name", type=str, default="Qwen/Qwen2.5-0.5B-Instruct", help="HuggingFace model to load")
+parser.add_argument("--wandb-project", type=str, default="continual-self-play", help="WandB project name")
+parser.add_argument("--checkpoint-freq", type=int, default=10, help="Iterations between saving checkpoints")
 args = parser.parse_args()
 
 # Disable JAX preallocation immediately so it doesn't crash PyTorch LLMs
@@ -48,7 +52,7 @@ def main():
     
     # We use a small local model for the walking skeleton. 
     # Qwen 3.6 can be dropped-in here later.
-    model_name = "Qwen/Qwen2.5-0.5B-Instruct"
+    model_name = args.model_name
     
     # Hardware Partitioning for JaxMARL
     if args.backend == "jaxmarl":
@@ -99,7 +103,11 @@ def main():
         "algorithm": args.algo,
         "regime": args.regime,
         "seed": args.seed,
-        "use_wandb": True
+        "use_wandb": True,
+        "beta": args.beta,
+        "run_name": args.run_name,
+        "project": args.wandb_project,
+        "model_name": args.model_name
     }
     logger = MetricsLogger(config=config_dict)
     
@@ -179,7 +187,7 @@ def main():
             print(f"Not enough trajectories ({len(replay_buffer)}) for a batch ({batch_size}). Accumulating...")
             
         # 3. Checkpointing (for Safety Frontier Evaluation and League Training)
-        if (iteration + 1) % 10 == 0:
+        if (iteration + 1) % args.checkpoint_freq == 0:
             import os
             checkpoint_dir = f"checkpoints_{args.algo.lower()}/iter_{iteration+1}"
             os.makedirs(checkpoint_dir, exist_ok=True)

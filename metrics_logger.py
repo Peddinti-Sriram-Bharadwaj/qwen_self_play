@@ -36,9 +36,13 @@ class MetricsLogger:
         
         # Initialize WandB
         if config.get("use_wandb", True):
+            run_name = config.get("run_name")
+            if not run_name:
+                run_name = f"regime_{self.regime}_seed{self.seed}"
+                
             wandb.init(
                 project=config.get("project", "continual-self-play"),
-                name=f"regime_{self.regime}_seed{self.seed}",
+                name=run_name,
                 group=f"{self.env_name}-main",
                 config=config,
                 tags=[self.regime, self.env_name, config.get("backend", "unknown"), config.get("algorithm", "DAPO")]

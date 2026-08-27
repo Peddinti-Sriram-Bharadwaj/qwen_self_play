@@ -17,7 +17,8 @@ class OpponentManager:
         self.checkpoint_dir = checkpoint_dir
         self.historical_pool = []
         self.batch_opponent = None
-        self.save_schedule = [100, 200, 400, 600, 800, 1000, 1200, 1400, 1600, 1800, 2000]
+        # The main loop triggers at iteration 99, 199, 399... (which is iteration+1 = 100)
+        self.save_schedule = [99, 199, 399, 599, 799, 999, 1199, 1399, 1599, 1799, 1999]
         
         print(f"Initializing Opponent Shell (Frozen Base Policy)...")
         # Extract the huggingface model path
