@@ -55,3 +55,8 @@ cheatsheet.sh
 
 *.csv
 *.png
+
+# Data and local test scripts
+data/
+test_*.py
+test_gen_output.txt
