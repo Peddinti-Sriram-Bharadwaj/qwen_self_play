@@ -13,9 +13,10 @@ class GRPOSelfPlayLoop:
     Implements the Anchored Self-Play reinforcement learning loop using GRPO.
     Handles the asynchronous sampling and training of the Generator and Fixer.
     """
-    def __init__(self, agent: DualLoraCodeAgent, dataset_path="synthetic_tasks.json", lr=1e-5):
+    def __init__(self, agent: DualLoraCodeAgent, dataset_path="synthetic_tasks.json", lr=1e-5, beta=0.04):
         self.agent = agent
         self.optimizer = AdamW(self.agent.model.parameters(), lr=lr)
+        self.beta = beta
         
         with open(dataset_path, "r") as f:
             self.dataset = json.load(f)
@@ -50,10 +51,13 @@ Buggy Code:
 ```
 """
 
-    def compute_grpo_loss(self, prompts, responses, advantages, adapter_name, beta=0.04, epsilon=0.2):
+    def compute_grpo_loss(self, prompts, responses, advantages, adapter_name, beta=None, epsilon=0.2):
         """
         Computes the Group Relative Policy Optimization loss using standard PyTorch.
         """
+        if beta is None:
+            beta = self.beta
+            
         self.agent.set_active_role(adapter_name)
         self.agent.model.train()
         
@@ -212,17 +216,23 @@ Buggy Code:
         }
 
 if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description="Run Anchored Self-Play")
+    parser.add_argument("--beta", type=float, default=0.04, help="KL Divergence Penalty (set to 0.0 for unanchored collapse)")
+    parser.add_argument("--run-name", type=str, default="qwen1.5b_anchored_run", help="WandB run name")
+    parser.add_argument("--steps", type=int, default=500, help="Number of steps to run")
+    args = parser.parse_args()
+
     print("Initializing Dual LoRA Agent (Qwen2.5-Coder-1.5B)...")
     agent = DualLoraCodeAgent(model_name="Qwen/Qwen2.5-Coder-1.5B-Instruct")
     
-    print("Initializing GRPO Self-Play Loop...")
-    loop = GRPOSelfPlayLoop(agent=agent, dataset_path="data/synthetic_tasks.json", lr=1e-5)
+    print(f"Initializing GRPO Self-Play Loop (Beta = {args.beta})...")
+    loop = GRPOSelfPlayLoop(agent=agent, dataset_path="data/synthetic_tasks.json", lr=1e-5, beta=args.beta)
     
-    wandb.init(project="anchored_code_self_play", name="qwen1.5b_grpo_run1")
+    wandb.init(project="anchored_code_self_play", name=args.run_name, config={"beta": args.beta})
     
     print("Starting Anchored Self-Play Training...")
-    # Run for 500 steps as an initial test
-    for step in range(1, 501):
+    for step in range(1, args.steps + 1):
         metrics = loop.run_step(G=4, K=4)
         if metrics:
             wandb.log(metrics, step=step)
@@ -230,9 +240,7 @@ if __name__ == "__main__":
         # Save checkpoints periodically
         if step % 50 == 0:
             print(f"Saving checkpoints at step {step}...")
-            # Save generator adapter
             agent.set_active_role("generator")
             agent.model.save_pretrained(f"checkpoints/step_{step}_generator")
-            # Save fixer adapter
             agent.set_active_role("fixer")
             agent.model.save_pretrained(f"checkpoints/step_{step}_fixer")
