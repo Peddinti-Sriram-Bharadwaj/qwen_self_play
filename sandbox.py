@@ -27,10 +27,9 @@ def evaluate_code(code: str, test_cases: list, timeout: int = 3) -> dict:
     # 2. Build the test harness
     # We append the test cases at the bottom of the candidate script
     script = code + "\n\n"
-    script += "if __name__ == '__main__':\n"
     for test in test_cases:
-        script += f"    {test}\n"
-    script += "    print('ALL_TESTS_PASSED')\n"
+        script += f"{test}\n"
+    script += "print('ALL_TESTS_PASSED')\n"
     
     # 3. Execute in an isolated temporary directory
     with tempfile.TemporaryDirectory() as tmpdir:

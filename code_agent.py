@@ -10,7 +10,12 @@ class DualLoraCodeAgent:
     """
     def __init__(self, model_name="Qwen/Qwen2.5-Coder-1.5B-Instruct", device=None, lora_r=16):
         if device is None:
-            self.device = "cuda" if torch.cuda.is_available() else "cpu"
+            if torch.cuda.is_available():
+                self.device = "cuda"
+            elif torch.backends.mps.is_available():
+                self.device = "mps"
+            else:
+                self.device = "cpu"
         else:
             self.device = device
             
@@ -20,10 +25,11 @@ class DualLoraCodeAgent:
             self.tokenizer.pad_token = self.tokenizer.eos_token
         self.tokenizer.padding_side = "left"
         
-        # Load base model in bfloat16 to fit nicely on standard GPUs
+        # Load base model in appropriate dtype
+        dtype = torch.bfloat16 if self.device != "mps" else torch.float16
         base_model = AutoModelForCausalLM.from_pretrained(
             model_name, 
-            torch_dtype=torch.bfloat16,
+            torch_dtype=dtype,
         ).to(self.device)
         
         # 1. Initialize PEFT configuration for the Generator
