@@ -198,9 +198,15 @@ def run_evaluation(gpu: str, checkpoints_dir: str, wandb_project: str):
                 # Check if the adapter weights actually exist to prevent PEFT from falling back to HF Hub
                 has_bin = os.path.exists(os.path.join(ckpt_path, "adapter_model.bin"))
                 has_safetensors = os.path.exists(os.path.join(ckpt_path, "adapter_model.safetensors"))
+                
+                # In PEFT, saving a multi-adapter model creates subdirectories for each adapter
                 if not (has_bin or has_safetensors):
-                    print(f"  -> SKIPPED: No adapter_model.bin or .safetensors found in {ckpt_path}")
-                    continue
+                    sub_ckpt_path = os.path.join(ckpt_path, "fixer")
+                    if os.path.exists(os.path.join(sub_ckpt_path, "adapter_model.safetensors")) or os.path.exists(os.path.join(sub_ckpt_path, "adapter_model.bin")):
+                        ckpt_path = sub_ckpt_path
+                    else:
+                        print(f"  -> SKIPPED: No adapter_model.bin or .safetensors found in {ckpt_path} or {sub_ckpt_path}")
+                        continue
 
                 # Overwrite the fixer adapter weights with the saved checkpoint
                 agent.model.load_adapter(ckpt_path, adapter_name="fixer")

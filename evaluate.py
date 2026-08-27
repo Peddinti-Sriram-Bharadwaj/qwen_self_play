@@ -36,8 +36,13 @@ def evaluate_checkpoint(checkpoint_path, dataset_path, agent=None, model_name=No
             import os
             has_bin = os.path.exists(os.path.join(checkpoint_path, "adapter_model.bin"))
             has_safetensors = os.path.exists(os.path.join(checkpoint_path, "adapter_model.safetensors"))
+            
             if not (has_bin or has_safetensors):
-                raise FileNotFoundError(f"No adapter_model.bin or .safetensors found in {checkpoint_path}. Ensure it is a valid local PEFT checkpoint.")
+                sub_ckpt_path = os.path.join(checkpoint_path, "fixer")
+                if os.path.exists(os.path.join(sub_ckpt_path, "adapter_model.safetensors")) or os.path.exists(os.path.join(sub_ckpt_path, "adapter_model.bin")):
+                    checkpoint_path = sub_ckpt_path
+                else:
+                    raise FileNotFoundError(f"No adapter_model.bin or .safetensors found in {checkpoint_path} or {sub_ckpt_path}. Ensure it is a valid local PEFT checkpoint.")
                 
             agent.model.load_adapter(checkpoint_path, adapter_name="fixer")
 
