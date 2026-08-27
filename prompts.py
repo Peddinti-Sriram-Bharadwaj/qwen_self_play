@@ -35,3 +35,25 @@ Correct Code:
 {code}
 ```
 """
+
+# --- NLP Domain Conflict Prompts (Grammar Correction) ---
+
+NLP_GEN_PROMPT = """You are an adversarial text generator.
+Given the following perfectly grammatically correct English sentence, your task is to introduce a subtle grammatical error, typo, or awkward phrasing.
+Do not completely change the meaning of the sentence, just introduce an error that needs fixing.
+
+Original Sentence:
+{correct_text}
+
+Return only the corrupted sentence. Do not provide explanations or formatting.
+"""
+
+NLP_FIX_PROMPT = """You are an expert English copyeditor.
+The following sentence contains a grammatical error, typo, or awkward phrasing.
+Fix the error and return the perfectly corrected sentence.
+
+Buggy Sentence:
+{corrupted_text}
+
+Return only the corrected sentence. Do not provide explanations or formatting.
+"""
