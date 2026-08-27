@@ -31,7 +31,9 @@ class GRPOSelfPlayLoop:
         with open(dataset_path, "r") as f:
             self.dataset = json.load(f)
             
-        self.train_tasks = self.dataset["train"]
+        # Support both flat list format (from generate_strict_datasets.py)
+        # and legacy dict format with a "train" key
+        self.train_tasks = self.dataset if isinstance(self.dataset, list) else self.dataset["train"]
         
         # Generator prompt template
         self.gen_prompt = """You are a code bug generator. Here is a correctly working function and its unit tests.
