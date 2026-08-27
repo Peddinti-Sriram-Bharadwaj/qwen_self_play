@@ -180,7 +180,9 @@ def run_evaluation(gpu: str, checkpoints_dir: str, wandb_project: str):
         # Collect all phaseA and phaseB fixer checkpoints
         ckpts = sorted(
             [d for d in os.listdir(checkpoints_dir)
-             if os.path.isdir(os.path.join(checkpoints_dir, d)) and "fixer" in d],
+             if os.path.isdir(os.path.join(checkpoints_dir, d)) 
+             and "fixer" in d 
+             and ("phaseA" in d or "phaseB" in d)],
             key=lambda x: int(x.split("step_")[1].split("_")[0])  # sort by step number
         )
 
