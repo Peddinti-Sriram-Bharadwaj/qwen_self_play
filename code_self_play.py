@@ -6,6 +6,7 @@ from code_agent import DualLoraCodeAgent, extract_python_code
 from sandbox import evaluate_code
 import random
 import numpy as np
+import wandb
 
 class GRPOSelfPlayLoop:
     """
@@ -202,6 +203,13 @@ Buggy Code:
         # 7. Step the Optimizer
         self.optimizer.step()
         print(f"Step Complete. Fixer Loss: {fixer_loss:.4f} | Generator Loss: {gen_loss:.4f}")
+        
+        return {
+            "fixer_loss": fixer_loss,
+            "generator_loss": gen_loss,
+            "fixer_success_rate": empirical_fix_rate,
+            "generator_reward": gen_reward
+        }
 
 if __name__ == "__main__":
     print("Initializing Dual LoRA Agent (Qwen2.5-Coder-1.5B)...")
@@ -210,10 +218,14 @@ if __name__ == "__main__":
     print("Initializing GRPO Self-Play Loop...")
     loop = GRPOSelfPlayLoop(agent=agent, dataset_path="synthetic_tasks.json", lr=1e-5)
     
+    wandb.init(project="anchored_code_self_play", name="qwen1.5b_grpo_run1")
+    
     print("Starting Anchored Self-Play Training...")
     # Run for 500 steps as an initial test
     for step in range(1, 501):
-        loop.run_step(G=4, K=4)
+        metrics = loop.run_step(G=4, K=4)
+        if metrics:
+            wandb.log(metrics, step=step)
         
         # Save checkpoints periodically
         if step % 50 == 0:
