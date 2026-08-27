@@ -82,3 +82,6 @@ git log --oneline -n 5
 
 # 2. Unanchored Collapse Experiment (Beta = 0.0) on GPU 1
 # nohup python -u code_self_play.py --gpu 1 --beta 0.0 --K 4 --run-name unanchored_collapse > run_unanchored.log 2>&1 &
+
+# 3. High Generator Variance (High G, High K) on GPU 2
+# nohup python -u code_self_play.py --gpu 2 --beta 0.04 --K 16 --G 16 --run-name high_g_high_k_anchored > run_high_g.log 2>&1 &
