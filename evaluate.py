@@ -66,6 +66,8 @@ Buggy Code:
         
         if res["all_passed"]:
             passed += 1
+        else:
+            print(f"  [Failure Reason] {res.get('output', 'Unknown error')}")
             
         print(f"[{i+1}/{total}] Task {task['task_id']} | Passed: {res['all_passed']} | Current pass@1: {(passed/(i+1))*100:.2f}%")
         
