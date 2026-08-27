@@ -42,3 +42,45 @@ def generator_reward(fix_rate: float) -> float:
     if 0.25 <= fix_rate <= 0.75:
         return 1.0
     return -0.5
+
+
+# --- NLP Domain Conflict Rewards ---
+
+def nlp_fixer_reward(fixed_text: str, ground_truth: str) -> float:
+    """
+    Reward for the Fixer in the NLP grammar correction task.
+    """
+    import difflib
+    fixed_text = fixed_text.strip()
+    ground_truth = ground_truth.strip()
+    
+    if fixed_text == ground_truth:
+        return 1.0
+        
+    similarity = difflib.SequenceMatcher(None, fixed_text, ground_truth).ratio()
+    if similarity > 0.95:
+        return 0.5
+    elif similarity > 0.8:
+        return 0.0
+    return -1.0
+
+def nlp_generator_reward(corrupted_text: str, ground_truth: str, fixer_success_rate: float) -> float:
+    """
+    Reward for the Generator. Must corrupt the text but keep it somewhat similar.
+    """
+    import difflib
+    corrupted_text = corrupted_text.strip()
+    ground_truth = ground_truth.strip()
+    
+    similarity = difflib.SequenceMatcher(None, corrupted_text, ground_truth).ratio()
+    
+    # If the generator completely destroyed the text or outputted nothing
+    if similarity < 0.5 or similarity == 1.0:
+        return -1.0
+        
+    # Standard zero-sum
+    if fixer_success_rate < 0.2:
+        return 1.0
+    elif fixer_success_rate < 0.5:
+        return 0.5
+    return -0.5

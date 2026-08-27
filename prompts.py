@@ -6,17 +6,17 @@ to guarantee they always use the same format.
 
 SYSTEM_MSG = "You are a helpful AI programming assistant."
 
-FIX_PROMPT = """\
-You are an expert Python debugger. Here is a problem description, a suite of unit tests, and a buggy implementation.
-Your task is to fix the bug so that all tests pass.
-First, reason about the bug and how to fix it step-by-step inside a <think> block.
-Then, output the corrected Python code block.
+FIX_PROMPT = """You are an expert Python developer. 
+The following Python code contains a bug that causes it to fail the provided unit tests.
+Identify the bug and return the fully corrected Python code.
 
-Problem: {problem}
-Tests: {tests}
+Problem:
+{problem}
+
+Failing Tests:
+{tests}
 
 Buggy Code:
-```python
 {buggy_code}
 ```
 """

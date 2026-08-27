@@ -89,8 +89,8 @@ def run_experiment():
             run_evals(step, ckpt_path)
 
     # --- PHASE 2: Training on Distribution B ---
-    print(f"\n--- PHASE 2: Training on Distribution B ({args.phase_steps} steps) ---")
-    loop_B = GRPOSelfPlayLoop(agent=agent, dataset_path="data/train_B.json", lr=1e-5, beta=args.beta)
+    print(f"\n--- PHASE 2: Training on Distribution B (NLP Domain Conflict) ({args.phase_steps} steps) ---")
+    loop_B = GRPOSelfPlayLoop(agent=agent, dataset_path="data/train_B_nlp.json", lr=1e-5, beta=args.beta)
 
     for step in range(args.phase_steps + 1, (args.phase_steps * 2) + 1):
         metrics = loop_B.run_step(G=args.G, K=args.K)

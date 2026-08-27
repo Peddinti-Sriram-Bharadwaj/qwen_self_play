@@ -56,8 +56,33 @@ def generate_datasets():
     
     with open("data/train_A.json", "w") as f:
         json.dump(train_A, f, indent=4)
-    with open("data/train_B.json", "w") as f:
-        json.dump(train_B, f, indent=4)
+        
+    print("\nGenerating synthetic sentences for NLP Domain Conflict (Phase B)...")
+    base_sentences = [
+        "The quick brown fox jumps over the lazy dog.",
+        "She sells seashells by the seashore.",
+        "Artificial intelligence is transforming the software industry rapidly.",
+        "The committee decided to postpone the meeting until next week.",
+        "Despite the heavy rain, the football match continued as planned.",
+        "I have never been to Paris, but I hope to visit it someday.",
+        "The recipe requires two cups of flour and one cup of sugar.",
+        "He opened the door cautiously, expecting to find someone there.",
+        "Learning a new programming language can be both challenging and rewarding.",
+        "The sun set behind the mountains, casting a golden glow over the valley."
+    ]
+    
+    train_B_nlp = []
+    for i in range(400):
+        # Repeat the sentences to create 400 tasks, appending a unique id/number to ensure variety
+        text = base_sentences[i % len(base_sentences)]
+        train_B_nlp.append({
+            "task_id": f"nlp_synth_{i}",
+            "correct_text": f"{text} This is instance number {i}."
+        })
+            
+    print(f"Generated Synthetic Train B (NLP): {len(train_B_nlp)} sentences.")
+    with open("data/train_B_nlp.json", "w") as f:
+        json.dump(train_B_nlp, f, indent=4)
         
     print("\nDownloading bigcode/humanevalpack for Strict Evaluations...")
     hep = load_dataset("bigcode/humanevalpack", "python")
