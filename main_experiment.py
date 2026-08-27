@@ -1,5 +1,6 @@
 import os
 import argparse
+from collections import deque
 
 # Parse the GPU argument BEFORE importing PyTorch to guarantee strict VRAM isolation
 _parser = argparse.ArgumentParser(add_help=False)
@@ -76,11 +77,16 @@ def run_experiment():
     # --- PHASE 1: Training on Distribution A ---
     print(f"\n--- PHASE 1: Training on Distribution A ({args.phase_steps} steps) ---")
     loop_A = GRPOSelfPlayLoop(agent=agent, dataset_path="data/train_A.json", lr=1e-5, beta=args.beta)
+    recent_fix_rates = deque(maxlen=10)  # rolling window for smoother monitoring
 
     for step in range(1, args.phase_steps + 1):
         metrics = loop_A.run_step(G=args.G, K=args.K)
         if metrics:
+            recent_fix_rates.append(metrics["fixer_success_rate"])
+            rolling_avg = sum(recent_fix_rates) / len(recent_fix_rates)
+            print(f"  [Step {step}] Rolling avg fix rate (last {len(recent_fix_rates)} steps): {rolling_avg*100:.1f}%")
             log_metrics(step, "Phase_A", metrics)
+            wandb.log({"Phase_A/fixer_success_rate_rolling": rolling_avg}, step=step)
 
         if step % args.eval_freq == 0:
             ckpt_path = f"checkpoints/phaseA_step_{step}_fixer"
@@ -91,11 +97,16 @@ def run_experiment():
     # --- PHASE 2: Training on Distribution B ---
     print(f"\n--- PHASE 2: Training on Distribution B ({args.phase_steps} steps) ---")
     loop_B = GRPOSelfPlayLoop(agent=agent, dataset_path="data/train_B.json", lr=1e-5, beta=args.beta)
+    recent_fix_rates = deque(maxlen=10)  # reset window for Phase B
 
     for step in range(args.phase_steps + 1, (args.phase_steps * 2) + 1):
         metrics = loop_B.run_step(G=args.G, K=args.K)
         if metrics:
+            recent_fix_rates.append(metrics["fixer_success_rate"])
+            rolling_avg = sum(recent_fix_rates) / len(recent_fix_rates)
+            print(f"  [Step {step}] Rolling avg fix rate (last {len(recent_fix_rates)} steps): {rolling_avg*100:.1f}%")
             log_metrics(step, "Phase_B", metrics)
+            wandb.log({"Phase_B/fixer_success_rate_rolling": rolling_avg}, step=step)
 
         if step % args.eval_freq == 0:
             ckpt_path = f"checkpoints/phaseB_step_{step}_fixer"
