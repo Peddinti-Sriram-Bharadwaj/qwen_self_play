@@ -9,6 +9,9 @@ ps aux | grep python
 # Kill all your running python scripts (Emergency Stop)
 pkill -u $USER -f main.py
 
+# Force Kill a specific python script safely by piping PIDs
+ps aux | grep main_experiment.py | grep -v grep | awk '{print $2}' | xargs kill -9
+
 # Check NVIDIA GPU Usage (The standard view)
 watch -n 1 nvidia-smi
 
@@ -85,3 +88,11 @@ git log --oneline -n 5
 
 # 3. High Generator Variance (High G, High K) on GPU 2
 # nohup python -u code_self_play.py --gpu 2 --beta 0.04 --K 16 --G 16 --run-name high_g_high_k_anchored > run_high_g.log 2>&1 &
+
+# Running the Strict Large-Scale Pipeline (Phase A / Phase B)
+# -----------------------------------------------------------
+# Step 1: Generate/Refresh the strict datasets (MBPP and HumanEvalFix)
+# python generate_strict_datasets.py
+
+# Step 2: Run the Multi-Phase Master Orchestrator (Evaluation every 100 steps)
+# nohup python -u main_experiment.py --gpu 0 --phase_steps 200 --eval_freq 100 --K 4 --G 4 > run_strict_experiment.log 2>&1 &
