@@ -52,3 +52,6 @@ checkpoints/
 *.swp
 latents/
 cheatsheet.sh
+
+*.csv
+*.png
