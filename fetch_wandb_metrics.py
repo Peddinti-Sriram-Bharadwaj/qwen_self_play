@@ -6,14 +6,20 @@ def fetch_metrics(entity, project_name):
     print(f"Fetching runs from {entity}/{project_name}...")
     api = wandb.Api()
     
-    # Get all runs in the specified project
-    runs = api.runs(f"{entity}/{project_name}")
+    # Get all runs in the specified project, sorted by newest first
+    runs = api.runs(f"{entity}/{project_name}", order="-created_at")
     
     data = []
+    seen_names = set()
     
     for run in runs:
+        # Skip if we already processed a newer run with this exact name
+        if run.name in seen_names:
+            continue
+            
         # We only care about runs that have logged plasticity metrics
         if "plasticity/feature_variance" in run.summary:
+            seen_names.add(run.name)
             run_data = {
                 "Run Name": run.name,
                 "State": run.state,
