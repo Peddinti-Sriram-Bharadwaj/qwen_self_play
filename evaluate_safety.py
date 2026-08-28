@@ -178,7 +178,9 @@ def run_evaluation(gpu: str, checkpoints_dir: str, wandb_project: str, model_nam
             else:
                 # Full model checkpoint. Needs a full reload.
                 print("Detected Full Model Checkpoint. Loading entirely new model to RAM...")
-                full_agent = SelfPlayCodeAgent(model_name=ckpt_path, use_lora=False)
+                full_agent = SelfPlayCodeAgent(model_name=model_name, use_lora=False)
+                from transformers import AutoModelForCausalLM
+                full_agent.model = AutoModelForCausalLM.from_pretrained(ckpt_path, torch_dtype=torch.bfloat16).to(full_agent.device)
                 rate = evaluate_safety(full_agent, label=ckpt_name, use_base_model=False)
                 del full_agent
                 gc.collect()
