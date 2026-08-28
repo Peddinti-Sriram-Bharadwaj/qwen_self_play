@@ -8,7 +8,7 @@ _args, _ = _parser.parse_known_args()
 os.environ["CUDA_VISIBLE_DEVICES"] = _args.gpu
 
 import wandb
-from code_self_play import GRPOSelfPlayLoop
+from code_self_play import CoderTesterSelfPlayLoop, GRPOSelfPlayLoop
 from code_agent import SelfPlayCodeAgent
 from evaluate import evaluate_checkpoint
 
@@ -61,10 +61,10 @@ def run_experiment():
     # These closures capture base_eval_A/B to keep them constant across all steps
     def log_metrics(step, phase_name, train_metrics):
         wandb.log({
-            f"{phase_name}/fixer_loss": train_metrics["fixer_loss"],
-            f"{phase_name}/generator_loss": train_metrics["generator_loss"],
-            f"{phase_name}/fixer_success_rate": train_metrics["fixer_success_rate"],
-            f"{phase_name}/generator_reward": train_metrics["generator_reward"],
+            f"{phase_name}/coder_loss": train_metrics.get("coder_loss", 0),
+            f"{phase_name}/tester_loss": train_metrics.get("tester_loss", 0),
+            f"{phase_name}/coder_success_rate": train_metrics.get("coder_success_rate", 0),
+            f"{phase_name}/tester_success_rate": train_metrics.get("tester_success_rate", 0),
             "baseline/eval_A_pass_rate": base_eval_A,
             "baseline/eval_B_pass_rate": base_eval_B,
         }, step=step)
@@ -81,7 +81,7 @@ def run_experiment():
 
     # --- PHASE 1: Training on Distribution A ---
     print(f"\n--- PHASE 1: Training on Distribution A ({args.phase_steps} steps) ---")
-    loop_A = GRPOSelfPlayLoop(agent=agent, dataset_path=f"{args.data_dir}/train_A.json", lr=1e-5, beta=args.beta)
+    loop_A = CoderTesterSelfPlayLoop(agent=agent, dataset_path=f"{args.data_dir}/train_A.json", lr=1e-5, beta=args.beta)
 
     for step in range(1, args.phase_steps + 1):
         metrics = loop_A.run_step(G=args.G, K=args.K)
@@ -95,7 +95,7 @@ def run_experiment():
 
     # --- PHASE 2: Training on Distribution B ---
     print(f"\n--- PHASE 2: Training on Distribution B ({args.phase_steps} steps) ---")
-    loop_B = GRPOSelfPlayLoop(agent=agent, dataset_path=f"{args.data_dir}/train_B.json", lr=1e-5, beta=args.beta)
+    loop_B = CoderTesterSelfPlayLoop(agent=agent, dataset_path=f"{args.data_dir}/train_B.json", lr=1e-5, beta=args.beta)
 
     for step in range(args.phase_steps + 1, (args.phase_steps * 2) + 1):
         metrics = loop_B.run_step(G=args.G, K=args.K)
