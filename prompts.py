@@ -37,12 +37,14 @@ Correct Code:
 """
 
 CODER_PROMPT = """\
-You are an expert Python programmer. Here is a problem description.
-Your task is to write a Python function that solves the problem.
+You are an expert Python programmer. Here is a problem description and a set of basic unit tests.
+Your task is to write a Python function that solves the problem. 
+Make sure your function name matches the one called in the unit tests!
 First, reason about the logic step-by-step inside a <think> block.
 Then, output the final Python code block containing the function implementation.
 
 Problem: {problem}
+Base Tests: {tests}
 """
 
 TESTER_PROMPT = """\

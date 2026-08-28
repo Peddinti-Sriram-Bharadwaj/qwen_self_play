@@ -207,7 +207,8 @@ class CoderTesterSelfPlayLoop(GRPOSelfPlayLoop):
         problem_id = task["task_id"]
         
         # 1. Coder Phase
-        raw_coder_prompts = [CODER_PROMPT.format(problem=task["problem"])] * G
+        tests_str = "\n".join(task["tests"])
+        raw_coder_prompts = [CODER_PROMPT.format(problem=task["problem"], tests=tests_str)] * G
         coder_prompts = [self._make_chat_prompt(p) for p in raw_coder_prompts]
         
         print("Sampling Coder...")
