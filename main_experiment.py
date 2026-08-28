@@ -18,6 +18,7 @@ def run_experiment():
     parser.add_argument("--gpu", type=str, default="0")
     parser.add_argument("--beta", type=float, default=0.04)
     parser.add_argument("--run-name", type=str, default="strict_forgetting_eval")
+    parser.add_argument("--model_name", type=str, default="Qwen/Qwen2.5-Coder-1.5B-Instruct")
     parser.add_argument("--phase_steps", type=int, default=200, help="Steps per phase")
     parser.add_argument("--eval_freq", type=int, default=100, help="Evaluate every N steps")
     parser.add_argument("--K", type=int, default=4)
@@ -34,10 +35,9 @@ def run_experiment():
     use_lora = not args.full_finetune
 
     wandb.init(project="anchored_code_self_play", name=args.run_name,
-               config={"beta": args.beta, "K": args.K, "G": args.G, "use_lora": use_lora})
 
-    print(f"Initializing SelfPlay Agent (use_lora={use_lora})...")
-    agent = SelfPlayCodeAgent(model_name="Qwen/Qwen2.5-Coder-1.5B-Instruct", use_lora=use_lora)
+    print(f"Initializing SelfPlay Agent (use_lora={use_lora}) with {args.model_name}...")
+    agent = SelfPlayCodeAgent(model_name=args.model_name, use_lora=use_lora)
 
     # --- PHASE 0: Baseline Evaluation ---
     if args.base_eval_A is not None and args.base_eval_B is not None:

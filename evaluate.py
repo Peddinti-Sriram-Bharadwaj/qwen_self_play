@@ -84,7 +84,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--checkpoint", type=str, default="base", help="Path to checkpoint (or 'base')")
     parser.add_argument("--dataset", type=str, required=True, help="Path to evaluation dataset")
-    parser.add_argument("--model", type=str, default="Qwen/Qwen2.5-Coder-1.5B-Instruct", help="HF model name")
+    parser.add_argument("--model_name", type=str, default="Qwen/Qwen2.5-Coder-1.5B-Instruct", help="Base model architecture")
     args = parser.parse_args()
 
-    evaluate_checkpoint(args.checkpoint, args.dataset, model_name=args.model)
+    evaluate_checkpoint(args.checkpoint, args.dataset, model_name=args.model_name)

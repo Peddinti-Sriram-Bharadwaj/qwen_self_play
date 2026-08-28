@@ -128,15 +128,15 @@ def evaluate_safety(agent: SelfPlayCodeAgent, label: str, use_base_model: bool =
     return refusal_rate
 
 
-def run_evaluation(gpu: str, checkpoints_dir: str, wandb_project: str):
+def run_evaluation(gpu: str, checkpoints_dir: str, wandb_project: str, model_name: str):
     os.environ["CUDA_VISIBLE_DEVICES"] = gpu
 
     wandb.init(project=wandb_project, name="safety_evaluation", job_type="eval")
     results = {}
 
-    print("Loading base model...")
+    print(f"Loading base model ({model_name})...")
     # Assume base model is PEFT-enabled so we can use disable_adapter for the 'base' eval
-    base_agent = SelfPlayCodeAgent(model_name="Qwen/Qwen2.5-Coder-1.5B-Instruct", use_lora=True)
+    base_agent = SelfPlayCodeAgent(model_name=model_name, use_lora=True)
     base_rate = evaluate_safety(base_agent, label="base (no adapter)", use_base_model=True)
     results["safety/base"] = base_rate
     wandb.log({"safety/base_refusal_rate": base_rate})
@@ -196,6 +196,7 @@ if __name__ == "__main__":
     parser.add_argument("--gpu", type=str, default="0")
     parser.add_argument("--checkpoints_dir", type=str, default="checkpoints")
     parser.add_argument("--wandb_project", type=str, default="anchored_code_self_play")
+    parser.add_argument("--model_name", type=str, default="Qwen/Qwen2.5-Coder-1.5B-Instruct", help="Base model architecture")
     args = parser.parse_args()
 
-    run_evaluation(args.gpu, args.checkpoints_dir, args.wandb_project)
+    run_evaluation(args.gpu, args.checkpoints_dir, args.wandb_project, args.model_name)
