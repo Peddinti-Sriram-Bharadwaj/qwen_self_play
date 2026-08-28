@@ -96,3 +96,13 @@ git log --oneline -n 5
 
 # Step 2: Run the Multi-Phase Master Orchestrator (Evaluation every 100 steps)
 # nohup python -u main_experiment.py --gpu 0 --phase_steps 200 --eval_freq 100 --K 4 --G 4 > run_strict_experiment.log 2>&1 &
+
+# Secure Copy (SCP) - Transferring Diagnostics to Local Mac
+# ---------------------------------------------------------
+# Run these from your LOCAL MAC terminal (not the server):
+# 
+# 1. Copy the plasticity diagnostic reports
+# scp -r srirambharadwaj@10.192.12.130:/data/home/srirambharadwaj/qwen_self_play/diagnostic_results ~/Desktop/
+#
+# 2. Copy the longitudinal trajectory plots
+# scp srirambharadwaj@10.192.12.130:/data/home/srirambharadwaj/qwen_self_play/*_plot.png ~/Desktop/
