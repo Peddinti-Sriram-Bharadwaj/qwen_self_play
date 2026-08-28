@@ -81,15 +81,13 @@ def run_diagnostics():
     base_loss_hard = run_target_distillation(base_clone, distillation_datasets["hard"], args.device)
     del base_clone
     
-    # Now load LoRA over the base model
-    lora_model = load_lora_model(base_model, args.lora_ckpt)
+    # Now load LoRA over a fresh base clone so we don't mutate base_model in-place!
+    lora_base = AutoModelForCausalLM.from_pretrained(args.base_model, torch_dtype=torch.bfloat16).to(args.device)
+    lora_model = load_lora_model(lora_base, args.lora_ckpt)
     
     print("\n==================================================")
     print(" METHOD 2 & 3 & 4: Diagnostics (LORA)")
     print("==================================================")
-    # Disable adapter temporarily for CKA base reference
-    with lora_model.disable_adapter():
-        base_ref = lora_model
     
     lora_cka = measure_representational_warp(base_model, lora_model, validation_dataset, args.device)
     lora_dormancy = measure_dormant_neurons(lora_model, validation_dataset, args.device)
@@ -102,17 +100,15 @@ def run_diagnostics():
     lora_loss_easy = run_target_distillation(lora_model, distillation_datasets["easy"], args.device)
     lora_loss_hard = run_target_distillation(lora_model, distillation_datasets["hard"], args.device)
     
-    del lora_model, base_model
+    del lora_model, lora_base
     torch.cuda.empty_cache()
     
     print("\n==================================================")
     print(" METHOD 2 & 3 & 4: Diagnostics (FULL)")
     print("==================================================")
     full_model = load_full_model(args.full_ckpt, args.device)
-    # Load base again for CKA reference
-    base_ref = AutoModelForCausalLM.from_pretrained(args.base_model, torch_dtype=torch.bfloat16).to(args.device)
     
-    full_cka = measure_representational_warp(base_ref, full_model, validation_dataset, args.device)
+    full_cka = measure_representational_warp(base_model, full_model, validation_dataset, args.device)
     full_dormancy = measure_dormant_neurons(full_model, validation_dataset, args.device)
     full_rank = measure_effective_rank(full_model, validation_dataset, args.device)
     print(f"Full Model Effective Rank: {full_rank:.2f}")
@@ -129,6 +125,9 @@ def run_diagnostics():
     plot_loss_curves(base_loss_easy, lora_loss_easy, full_loss_easy, "Distillation (Easy Task)", "diagnostic_results/distillation_easy.png")
     plot_loss_curves(base_loss_hard, lora_loss_hard, full_loss_hard, "Distillation (Hard Task)", "diagnostic_results/distillation_hard.png")
     
+    lora_cka_str = ", ".join([f"L{k}: {v:.6f}" for k, v in lora_cka.items()])
+    full_cka_str = ", ".join([f"L{k}: {v:.6f}" for k, v in full_cka.items()])
+
     report = f"""# Plasticity Diagnostics Report
 
 ## Method 1: Control Target Distillation
@@ -146,9 +145,16 @@ Loss curves have been saved to `diagnostic_results/`. If LoRA or Full models pla
 *(Drop in rank = representation collapse)*
 
 ## Method 4: Representational Warp (Average CKA)
-- LoRA vs Base CKA: {sum(lora_cka.values())/len(lora_cka):.4f}
-- Full vs Base CKA: {sum(full_cka.values())/len(full_cka):.4f}
+- LoRA vs Base CKA: {sum(lora_cka.values())/len(lora_cka):.6f} (Min: {min(lora_cka.values()):.6f}, Max: {max(lora_cka.values()):.6f})
+- Full vs Base CKA: {sum(full_cka.values())/len(full_cka):.6f} (Min: {min(full_cka.values()):.6f}, Max: {max(full_cka.values()):.6f})
 *(CKA < 0.9 = severe geometric warping)*
+
+### Layer-wise CKA Details:
+**LoRA:**
+{lora_cka_str}
+
+**Full:**
+{full_cka_str}
 """
     with open("diagnostic_results/plasticity_report.md", "w") as f:
         f.write(report)
