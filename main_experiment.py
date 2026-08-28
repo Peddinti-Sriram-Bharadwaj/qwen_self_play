@@ -25,6 +25,7 @@ def run_experiment():
     parser.add_argument("--G", type=int, default=4)
     parser.add_argument("--full_finetune", action="store_true", help="Use Full Adaptation instead of LoRA")
     parser.add_argument("--ckpt_dir", type=str, default="checkpoints", help="Directory to save checkpoints")
+    parser.add_argument("--data_dir", type=str, default="data", help="Directory containing train/eval datasets")
     # Skip Phase 0 and inject known baseline values directly (useful after a crash recovery)
     parser.add_argument("--base_eval_A", type=float, default=None,
                         help="Known baseline pass@1 for eval_A (skips Phase 0 re-evaluation)")
@@ -48,8 +49,8 @@ def run_experiment():
         base_eval_B = args.base_eval_B
     else:
         print("\n--- PHASE 0: Baseline Evaluation ---")
-        base_eval_A = evaluate_checkpoint("base", "data/eval_A.json", agent)
-        base_eval_B = evaluate_checkpoint("base", "data/eval_B.json", agent)
+        base_eval_A = evaluate_checkpoint("base", f"{args.data_dir}/eval_A.json", agent)
+        base_eval_B = evaluate_checkpoint("base", f"{args.data_dir}/eval_B.json", agent)
 
     # Log baseline values at step 0 so they appear as horizontal reference lines in WandB
     wandb.log({
@@ -69,8 +70,8 @@ def run_experiment():
         }, step=step)
 
     def run_evals(step, checkpoint_path):
-        eval_A = evaluate_checkpoint(checkpoint_path, "data/eval_A.json", agent)
-        eval_B = evaluate_checkpoint(checkpoint_path, "data/eval_B.json", agent)
+        eval_A = evaluate_checkpoint(checkpoint_path, f"{args.data_dir}/eval_A.json", agent)
+        eval_B = evaluate_checkpoint(checkpoint_path, f"{args.data_dir}/eval_B.json", agent)
         wandb.log({
             "eval/eval_A_pass_rate": eval_A,
             "eval/eval_B_pass_rate": eval_B,
@@ -80,7 +81,7 @@ def run_experiment():
 
     # --- PHASE 1: Training on Distribution A ---
     print(f"\n--- PHASE 1: Training on Distribution A ({args.phase_steps} steps) ---")
-    loop_A = GRPOSelfPlayLoop(agent=agent, dataset_path="data/train_A.json", lr=1e-5, beta=args.beta)
+    loop_A = GRPOSelfPlayLoop(agent=agent, dataset_path=f"{args.data_dir}/train_A.json", lr=1e-5, beta=args.beta)
 
     for step in range(1, args.phase_steps + 1):
         metrics = loop_A.run_step(G=args.G, K=args.K)
@@ -94,7 +95,7 @@ def run_experiment():
 
     # --- PHASE 2: Training on Distribution B ---
     print(f"\n--- PHASE 2: Training on Distribution B ({args.phase_steps} steps) ---")
-    loop_B = GRPOSelfPlayLoop(agent=agent, dataset_path="data/train_B.json", lr=1e-5, beta=args.beta)
+    loop_B = GRPOSelfPlayLoop(agent=agent, dataset_path=f"{args.data_dir}/train_B.json", lr=1e-5, beta=args.beta)
 
     for step in range(args.phase_steps + 1, (args.phase_steps * 2) + 1):
         metrics = loop_B.run_step(G=args.G, K=args.K)

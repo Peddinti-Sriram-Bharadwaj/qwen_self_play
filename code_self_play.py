@@ -192,6 +192,8 @@ if __name__ == "__main__":
     parser.add_argument("--K", type=int, default=16)
     parser.add_argument("--G", type=int, default=4)
     parser.add_argument("--full_finetune", action="store_true")
+    parser.add_argument("--data_dir", type=str, default="data", help="Directory containing datasets")
+    parser.add_argument("--ckpt_dir", type=str, default="checkpoints", help="Directory to save checkpoints")
     args = parser.parse_args()
 
     os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
@@ -201,11 +203,14 @@ if __name__ == "__main__":
     agent = SelfPlayCodeAgent(model_name="Qwen/Qwen2.5-Coder-1.5B-Instruct", use_lora=use_lora)
 
     print(f"Initializing GRPO Self-Play Loop (Beta = {args.beta})...")
-    loop = GRPOSelfPlayLoop(agent=agent, dataset_path="data/train_A.json", lr=1e-5, beta=args.beta)
+    loop = GRPOSelfPlayLoop(agent=agent, dataset_path=f"{args.data_dir}/train_A.json", lr=1e-5, beta=args.beta)
 
     wandb.init(project="anchored_code_self_play", name=args.run_name, config={"beta": args.beta, "use_lora": use_lora})
 
     print("Starting True Self-Play Training...")
+    
+    os.makedirs(args.ckpt_dir, exist_ok=True)
+    
     for step in range(1, args.steps + 1):
         metrics = loop.run_step(G=args.G, K=args.K)
         if metrics:
@@ -213,4 +218,4 @@ if __name__ == "__main__":
 
         if step % 50 == 0:
             print(f"Saving checkpoints at step {step}...")
-            agent.model.save_pretrained(f"checkpoints/step_{step}_self_play")
+            agent.model.save_pretrained(f"{args.ckpt_dir}/step_{step}_self_play")
