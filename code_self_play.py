@@ -9,8 +9,8 @@ import wandb
 from code_agent import SelfPlayCodeAgent
 from parsing import extract_python_code
 from sandbox import evaluate_code
-from prompts import FIX_PROMPT, GEN_PROMPT, SYSTEM_MSG, NLP_GEN_PROMPT, NLP_FIX_PROMPT
-from rewards import fixer_reward, generator_reward, nlp_fixer_reward, nlp_generator_reward
+from prompts import FIX_PROMPT, GEN_PROMPT, SYSTEM_MSG
+from rewards import fixer_reward, generator_reward
 
 
 class GRPOSelfPlayLoop:
@@ -100,73 +100,10 @@ class GRPOSelfPlayLoop:
         return avg_loss.item()
 
     def run_step(self, G=4, K=4):
-        """Executes a single step of the Self-Play loop (Code or NLP)."""
+        """Executes a single step of the Code Self-Play loop."""
         task = random.choice(self.train_tasks)
         print(f"\n--- STEP: Task {task['task_id']} ---")
-
-        is_nlp = "correct_text" in task
-
-        if is_nlp:
-            return self._run_nlp_step(task, G, K)
-        else:
-            return self._run_code_step(task, G, K)
-
-    def _run_nlp_step(self, task: dict, G: int, K: int):
-        correct_text = task["correct_text"]
-        
-        raw_gen_prompts = [NLP_GEN_PROMPT.format(correct_text=correct_text)] * G
-        gen_prompts = [self._make_chat_prompt(p) for p in raw_gen_prompts]
-        
-        print("Sampling NLP Generator...")
-        raw_corruptions = self.agent.batched_generate(gen_prompts, max_tokens=150)
-        
-        target_corruption = raw_corruptions[0].strip()
-        if not target_corruption:
-            print("Generator failed to produce any text. Skipping.")
-            return
-            
-        raw_fix_prompts = [NLP_FIX_PROMPT.format(corrupted_text=target_corruption)] * K
-        fix_prompts = [self._make_chat_prompt(p) for p in raw_fix_prompts]
-        
-        print("Sampling NLP Fixer...")
-        raw_fixes = self.agent.batched_generate(fix_prompts, max_tokens=150)
-        
-        fix_rewards = np.array([nlp_fixer_reward(fix, correct_text) for fix in raw_fixes])
-        empirical_fix_rate = np.mean(fix_rewards > 0)
-        print(f"NLP Fixer Success Rate: {empirical_fix_rate*100:.1f}%")
-        
-        if np.std(fix_rewards) > 1e-8:
-            fix_advantages = (fix_rewards - np.mean(fix_rewards)) / (np.std(fix_rewards) + 1e-8)
-        else:
-            fix_advantages = fix_rewards - np.mean(fix_rewards)
-            
-        self.optimizer.zero_grad()
-        print("Computing NLP Fixer GRPO Loss...")
-        fixer_loss = self.compute_grpo_loss(
-            prompts=fix_prompts,
-            responses=raw_fixes,
-            advantages=torch.tensor(fix_advantages, dtype=torch.float32).to(self.agent.device)
-        )
-        
-        gen_rew = nlp_generator_reward(target_corruption, correct_text, empirical_fix_rate)
-        gen_advantages = torch.full((G,), gen_rew, dtype=torch.float32).to(self.agent.device)
-        
-        print("Computing NLP Generator GRPO Loss...")
-        gen_loss = self.compute_grpo_loss(
-            prompts=gen_prompts,
-            responses=raw_corruptions,
-            advantages=gen_advantages
-        )
-        
-        self.optimizer.step()
-        print(f"NLP Step Complete. Fixer Loss: {fixer_loss:.4f} | Generator Loss: {gen_loss:.4f}")
-        
-        return {
-            "fixer_loss": fixer_loss,
-            "generator_loss": gen_loss,
-            "fixer_success_rate": empirical_fix_rate,
-            "generator_reward": gen_rew
-        }
+        return self._run_code_step(task, G, K)
 
     def _run_code_step(self, task: dict, G: int, K: int):
         tests_str = "\n".join(task["tests"])
