@@ -15,30 +15,43 @@ args = parser.parse_args()
 
 os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
 
-from code_agent import SelfPlayCodeAgent
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from peft import PeftModel
 from diagnostics.target_distillation import generate_distillation_datasets, run_target_distillation
-from transformers import AutoModelForCausalLM
+
+def clear_vram():
+    gc.collect()
+    torch.cuda.empty_cache()
 
 def main():
+    if not os.path.exists(args.checkpoints_dir):
+        print(f"Error: Directory {args.checkpoints_dir} does not exist!")
+        return
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Starting Longitudinal Diagnostics on {device}")
     
-    # 1. Initialize Base Model & Datasets
-    print("Loading Base Model...")
-    base_agent = SelfPlayCodeAgent(model_name=args.model_name, use_lora=True)
-    datasets = generate_distillation_datasets(base_agent.tokenizer)
+    tokenizer = AutoTokenizer.from_pretrained(args.model_name)
+    datasets = generate_distillation_datasets(tokenizer)
     
     results = {}
     
-    # Evaluate Base Model (Step 0)
+    # --- Step 0 (Base Model) ---
     print("\n--- Evaluating Base Model (Step 0) ---")
-    base_agent.model.eval()
+    base_model = AutoModelForCausalLM.from_pretrained(args.model_name, torch_dtype=torch.bfloat16).to(device)
     
-    # Disable adapters to evaluate raw base model
-    with base_agent.model.disable_adapter():
-        hard_loss = run_target_distillation(base_agent.model, datasets["hard"], device, steps=50)
-        relearn_loss = run_target_distillation(base_agent.model, datasets["relearn"], device, steps=50)
-        
+    # We must clone the base model for the two separate distillation tests so gradients don't leak
+    print("  Running Plasticity Probe (Hard Task)...")
+    hard_loss = run_target_distillation(base_model, datasets["hard"], device, steps=50)
+    del base_model
+    clear_vram()
+    
+    print("  Running Relearning Probe (Task A)...")
+    base_model = AutoModelForCausalLM.from_pretrained(args.model_name, torch_dtype=torch.bfloat16).to(device)
+    relearn_loss = run_target_distillation(base_model, datasets["relearn"], device, steps=50)
+    del base_model
+    clear_vram()
+    
     results[0] = {
         "plasticity_auc": sum(hard_loss),
         "plasticity_final": hard_loss[-1],
@@ -46,7 +59,7 @@ def main():
         "relearn_final": relearn_loss[-1]
     }
     
-    # 2. Find Checkpoints
+    # --- Checkpoints ---
     ckpts = sorted(
         [d for d in os.listdir(args.checkpoints_dir)
          if os.path.isdir(os.path.join(args.checkpoints_dir, d)) 
@@ -55,10 +68,6 @@ def main():
         key=lambda x: int(x.split("step_")[1].split("_")[0]) if "step_" in x else 0
     )
     
-    if not ckpts:
-        print(f"No checkpoints found in {args.checkpoints_dir}")
-        return
-        
     for ckpt_name in ckpts:
         ckpt_path = os.path.join(args.checkpoints_dir, ckpt_name)
         step = int(ckpt_name.split("step_")[1].split("_")[0])
@@ -72,36 +81,37 @@ def main():
                   
         if is_peft:
             actual_adapter_dir = adapter_path if os.path.exists(adapter_path) else ckpt_path
-            # Reload base weights to undo previous distillation gradients!
-            base_agent.model.unload()
-            base_agent = SelfPlayCodeAgent(model_name=args.model_name, use_lora=True)
-            base_agent.model.load_adapter(actual_adapter_dir, adapter_name="self_play")
             
-            hard_loss = run_target_distillation(base_agent.model, datasets["hard"], device, steps=50)
+            # Plasticity Probe
+            print("  Running Plasticity Probe (Hard Task)...")
+            base = AutoModelForCausalLM.from_pretrained(args.model_name, torch_dtype=torch.bfloat16).to(device)
+            model = PeftModel.from_pretrained(base, actual_adapter_dir, is_trainable=True)
+            hard_loss = run_target_distillation(model, datasets["hard"], device, steps=50)
+            del model, base
+            clear_vram()
             
-            # Reload again before second distillation so gradients don't leak
-            base_agent.model.unload()
-            base_agent = SelfPlayCodeAgent(model_name=args.model_name, use_lora=True)
-            base_agent.model.load_adapter(actual_adapter_dir, adapter_name="self_play")
-            
-            relearn_loss = run_target_distillation(base_agent.model, datasets["relearn"], device, steps=50)
+            # Relearning Probe
+            print("  Running Relearning Probe (Task A)...")
+            base = AutoModelForCausalLM.from_pretrained(args.model_name, torch_dtype=torch.bfloat16).to(device)
+            model = PeftModel.from_pretrained(base, actual_adapter_dir, is_trainable=True)
+            relearn_loss = run_target_distillation(model, datasets["relearn"], device, steps=50)
+            del model, base
+            clear_vram()
             
         else:
-            # Full Model
-            full_agent = SelfPlayCodeAgent(model_name=args.model_name, use_lora=False)
-            full_agent.model = AutoModelForCausalLM.from_pretrained(ckpt_path, torch_dtype=torch.bfloat16).to(device)
-            hard_loss = run_target_distillation(full_agent.model, datasets["hard"], device, steps=50)
-            del full_agent
-            gc.collect()
-            torch.cuda.empty_cache()
+            # Plasticity Probe
+            print("  Running Plasticity Probe (Hard Task)...")
+            model = AutoModelForCausalLM.from_pretrained(ckpt_path, torch_dtype=torch.bfloat16).to(device)
+            hard_loss = run_target_distillation(model, datasets["hard"], device, steps=50)
+            del model
+            clear_vram()
             
-            # Reload for Relearn
-            full_agent = SelfPlayCodeAgent(model_name=args.model_name, use_lora=False)
-            full_agent.model = AutoModelForCausalLM.from_pretrained(ckpt_path, torch_dtype=torch.bfloat16).to(device)
-            relearn_loss = run_target_distillation(full_agent.model, datasets["relearn"], device, steps=50)
-            del full_agent
-            gc.collect()
-            torch.cuda.empty_cache()
+            # Relearning Probe
+            print("  Running Relearning Probe (Task A)...")
+            model = AutoModelForCausalLM.from_pretrained(ckpt_path, torch_dtype=torch.bfloat16).to(device)
+            relearn_loss = run_target_distillation(model, datasets["relearn"], device, steps=50)
+            del model
+            clear_vram()
             
         results[step] = {
             "plasticity_auc": sum(hard_loss),
@@ -115,19 +125,19 @@ def main():
         json.dump(results, f, indent=4)
         
     # Plotting
-    steps = sorted(results.keys())
-    plasticity_auc = [results[s]["plasticity_auc"] for s in steps]
-    relearn_auc = [results[s]["relearn_auc"] for s in steps]
+    steps_list = sorted(results.keys())
+    plasticity_auc = [results[s]["plasticity_auc"] for s in steps_list]
+    relearn_auc = [results[s]["relearn_auc"] for s in steps_list]
     
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
     
-    ax1.plot(steps, plasticity_auc, marker='o', color='red', label='Plasticity AUC (Hard Task)')
+    ax1.plot(steps_list, plasticity_auc, marker='o', color='red', label='Plasticity AUC (Hard Task)')
     ax1.set_title("Adaptation Efficiency (Plasticity)\nLower is better")
     ax1.set_xlabel("Training Step")
     ax1.set_ylabel("Loss AUC")
     ax1.grid(True, linestyle='--', alpha=0.6)
     
-    ax2.plot(steps, relearn_auc, marker='o', color='blue', label='Relearning AUC (Task A)')
+    ax2.plot(steps_list, relearn_auc, marker='o', color='blue', label='Relearning AUC (Task A)')
     ax2.set_title("Retention & Recovery (Forgetting)\nLower is better")
     ax2.set_xlabel("Training Step")
     ax2.set_ylabel("Loss AUC")
