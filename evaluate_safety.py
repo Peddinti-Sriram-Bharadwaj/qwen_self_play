@@ -162,12 +162,18 @@ def run_evaluation(gpu: str, checkpoints_dir: str, wandb_project: str, model_nam
 
             print(f"\nLoading checkpoint from {ckpt_path}...")
             
+            # The adapter is usually saved in a 'self_play' subdirectory by the agent
+            adapter_path = os.path.join(ckpt_path, "self_play")
+            
             is_peft = os.path.exists(os.path.join(ckpt_path, "adapter_model.safetensors")) or \
-                      os.path.exists(os.path.join(ckpt_path, "adapter_model.bin"))
+                      os.path.exists(os.path.join(ckpt_path, "adapter_model.bin")) or \
+                      os.path.exists(os.path.join(adapter_path, "adapter_model.safetensors")) or \
+                      os.path.exists(os.path.join(adapter_path, "adapter_model.bin"))
 
             if is_peft:
                 # Reuse the base_agent, just swap the adapter
-                base_agent.model.load_adapter(ckpt_path, adapter_name="self_play")
+                actual_adapter_dir = adapter_path if os.path.exists(adapter_path) else ckpt_path
+                base_agent.model.load_adapter(actual_adapter_dir, adapter_name="self_play")
                 rate = evaluate_safety(base_agent, label=ckpt_name, use_base_model=False)
             else:
                 # Full model checkpoint. Needs a full reload.
