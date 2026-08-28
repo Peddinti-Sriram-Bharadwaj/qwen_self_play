@@ -45,18 +45,16 @@ class MockTokenizer:
 
 class MockAgent:
     """
-    A drop-in replacement for DualLoraCodeAgent that never loads a model.
+    A drop-in replacement for SelfPlayCodeAgent that never loads a model.
     Responses are configured per-test via `set_response(...)`.
     """
     device = "cpu"
     tokenizer = MockTokenizer()
     _response = "```python\npass\n```"
+    use_lora = True
 
     def set_response(self, text: str):
         self._response = text
-
-    def set_active_role(self, role: str):
-        pass  # No-op
 
     def batched_generate(self, prompts: list, **kwargs) -> list:
         return [self._response] * len(prompts)

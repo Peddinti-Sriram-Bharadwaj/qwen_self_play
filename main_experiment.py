@@ -9,12 +9,12 @@ os.environ["CUDA_VISIBLE_DEVICES"] = _args.gpu
 
 import wandb
 from code_self_play import GRPOSelfPlayLoop
-from code_agent import DualLoraCodeAgent
+from code_agent import SelfPlayCodeAgent
 from evaluate import evaluate_checkpoint
 
 
 def run_experiment():
-    parser = argparse.ArgumentParser(description="Strict Multi-Phase Catastrophic Forgetting Experiment")
+    parser = argparse.ArgumentParser(description="Strict Multi-Phase Catastrophic Forgetting Experiment (True Self Play)")
     parser.add_argument("--gpu", type=str, default="0")
     parser.add_argument("--beta", type=float, default=0.04)
     parser.add_argument("--run-name", type=str, default="strict_forgetting_eval")
@@ -22,6 +22,7 @@ def run_experiment():
     parser.add_argument("--eval_freq", type=int, default=100, help="Evaluate every N steps")
     parser.add_argument("--K", type=int, default=4)
     parser.add_argument("--G", type=int, default=4)
+    parser.add_argument("--full_finetune", action="store_true", help="Use Full Adaptation instead of LoRA")
     # Skip Phase 0 and inject known baseline values directly (useful after a crash recovery)
     parser.add_argument("--base_eval_A", type=float, default=None,
                         help="Known baseline pass@1 for eval_A (skips Phase 0 re-evaluation)")
@@ -29,11 +30,13 @@ def run_experiment():
                         help="Known baseline pass@1 for eval_B (skips Phase 0 re-evaluation)")
     args = parser.parse_args()
 
-    wandb.init(project="anchored_code_self_play", name=args.run_name,
-               config={"beta": args.beta, "K": args.K, "G": args.G})
+    use_lora = not args.full_finetune
 
-    print("Initializing Dual LoRA Agent...")
-    agent = DualLoraCodeAgent(model_name="Qwen/Qwen2.5-Coder-1.5B-Instruct")
+    wandb.init(project="anchored_code_self_play", name=args.run_name,
+               config={"beta": args.beta, "K": args.K, "G": args.G, "use_lora": use_lora})
+
+    print(f"Initializing SelfPlay Agent (use_lora={use_lora})...")
+    agent = SelfPlayCodeAgent(model_name="Qwen/Qwen2.5-Coder-1.5B-Instruct", use_lora=use_lora)
 
     # --- PHASE 0: Baseline Evaluation ---
     if args.base_eval_A is not None and args.base_eval_B is not None:
@@ -83,8 +86,7 @@ def run_experiment():
             log_metrics(step, "Phase_A", metrics)
 
         if step % args.eval_freq == 0:
-            ckpt_path = f"checkpoints/phaseA_step_{step}_fixer"
-            agent.set_active_role("fixer")
+            ckpt_path = f"checkpoints/phaseA_step_{step}_self_play"
             agent.model.save_pretrained(ckpt_path)
             run_evals(step, ckpt_path)
 
@@ -98,8 +100,7 @@ def run_experiment():
             log_metrics(step, "Phase_B", metrics)
 
         if step % args.eval_freq == 0:
-            ckpt_path = f"checkpoints/phaseB_step_{step}_fixer"
-            agent.set_active_role("fixer")
+            ckpt_path = f"checkpoints/phaseB_step_{step}_self_play"
             agent.model.save_pretrained(ckpt_path)
             run_evals(step, ckpt_path)
 

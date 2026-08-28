@@ -1,7 +1,8 @@
 import json
 import argparse
+import os
 
-from code_agent import DualLoraCodeAgent
+from code_agent import SelfPlayCodeAgent
 from parsing import extract_python_code
 from sandbox import evaluate_code
 from prompts import FIX_PROMPT, SYSTEM_MSG
@@ -12,10 +13,10 @@ def evaluate_checkpoint(checkpoint_path, dataset_path, agent=None, model_name=No
     Evaluates a checkpoint (or the base model) on a dataset and returns pass@1.
 
     Args:
-        checkpoint_path: Path to LoRA checkpoint, or "base" for the untrained model.
+        checkpoint_path: Path to LoRA checkpoint, full model checkpoint, or "base".
         dataset_path:    Path to a JSON eval dataset (e.g., data/eval_A.json).
-        agent:           An already-initialized DualLoraCodeAgent (preferred).
-                         If None, a new agent is created using model_name.
+        agent:           An already-initialized SelfPlayCodeAgent (preferred).
+                         If None, a new agent is created.
         model_name:      Required if agent is None.
     """
     print(f"\nEvaluating Checkpoint: {checkpoint_path}")
@@ -26,27 +27,23 @@ def evaluate_checkpoint(checkpoint_path, dataset_path, agent=None, model_name=No
 
     if agent is None:
         if model_name is None:
-            raise ValueError(
-                "Must provide either 'agent' or 'model_name' to evaluate_checkpoint()"
-            )
-        agent = DualLoraCodeAgent(model_name=model_name)
-        if checkpoint_path != "base":
-            print(f"Loading LoRA weights from {checkpoint_path}...")
+            raise ValueError("Must provide either 'agent' or 'model_name'")
             
-            import os
-            has_bin = os.path.exists(os.path.join(checkpoint_path, "adapter_model.bin"))
-            has_safetensors = os.path.exists(os.path.join(checkpoint_path, "adapter_model.safetensors"))
-            
-            if not (has_bin or has_safetensors):
-                sub_ckpt_path = os.path.join(checkpoint_path, "fixer")
-                if os.path.exists(os.path.join(sub_ckpt_path, "adapter_model.safetensors")) or os.path.exists(os.path.join(sub_ckpt_path, "adapter_model.bin")):
-                    checkpoint_path = sub_ckpt_path
-                else:
-                    raise FileNotFoundError(f"No adapter_model.bin or .safetensors found in {checkpoint_path} or {sub_ckpt_path}. Ensure it is a valid local PEFT checkpoint.")
-                
-            agent.model.load_adapter(checkpoint_path, adapter_name="fixer")
-
-    agent.set_active_role("fixer")
+        if checkpoint_path == "base":
+            agent = SelfPlayCodeAgent(model_name=model_name, use_lora=True)
+        else:
+            # Determine if the checkpoint is a PEFT adapter or a Full Model
+            is_peft = os.path.exists(os.path.join(checkpoint_path, "adapter_model.safetensors")) or \
+                      os.path.exists(os.path.join(checkpoint_path, "adapter_model.bin"))
+                      
+            if is_peft:
+                print(f"Loading LoRA adapter from {checkpoint_path}...")
+                agent = SelfPlayCodeAgent(model_name=model_name, use_lora=True)
+                agent.model.load_adapter(checkpoint_path, adapter_name="self_play")
+            else:
+                print(f"Loading Full Model from {checkpoint_path}...")
+                # Pass the checkpoint_path as the base model_name, and disable LoRA
+                agent = SelfPlayCodeAgent(model_name=checkpoint_path, use_lora=False)
 
     passed = 0
     total = len(dataset)
@@ -66,7 +63,7 @@ def evaluate_checkpoint(checkpoint_path, dataset_path, agent=None, model_name=No
         prompt = agent.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
 
         # pass@1 strict evaluation (temperature ≈ 0 for near-greedy decoding)
-        raw_fixes = agent.batched_generate([prompt], adapter_name="fixer", max_tokens=512, temperature=0.01)
+        raw_fixes = agent.batched_generate([prompt], max_tokens=512, temperature=0.01)
         parsed_fix = extract_python_code(raw_fixes[0])
 
         res = evaluate_code(parsed_fix, task["tests"])

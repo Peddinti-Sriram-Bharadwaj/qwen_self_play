@@ -3,13 +3,17 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 from peft import LoraConfig, get_peft_model
 
 
-class DualLoraCodeAgent:
+class SelfPlayCodeAgent:
     """
-    Wraps a causal language model with two distinct LoRA adapters ('generator' and 'fixer').
-    Provides utilities for fast adapter switching and batched generation.
-    Code parsing utilities live in parsing.py (decoupled from the model).
+    Wraps a causal language model for True Self-Play.
+    Provides utilities for batched generation and abstract KL anchor computation.
+    
+    Supports two modes:
+    - use_lora=True: Uses a single shared PEFT adapter for both generation and fixing.
+    - use_lora=False: Makes the full base model trainable, and loads a separate frozen 
+      reference model into memory for KL anchoring.
     """
-    def __init__(self, model_name="Qwen/Qwen2.5-Coder-1.5B-Instruct", device=None, lora_r=16):
+    def __init__(self, model_name="Qwen/Qwen2.5-Coder-1.5B-Instruct", device=None, lora_r=16, use_lora=True):
         if device is None:
             if torch.cuda.is_available():
                 self.device = "cuda"
@@ -20,7 +24,9 @@ class DualLoraCodeAgent:
         else:
             self.device = device
 
-        print(f"Loading {model_name} on {self.device}...")
+        self.use_lora = use_lora
+        print(f"Loading {model_name} on {self.device}... (use_lora={use_lora})")
+        
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
@@ -33,38 +39,58 @@ class DualLoraCodeAgent:
             dtype=dtype,
         ).to(self.device)
 
-        # 1. Initialize PEFT configuration for the Generator
-        lora_config = LoraConfig(
-            r=lora_r,
-            lora_alpha=32,
-            target_modules=["q_proj", "v_proj"],
-            lora_dropout=0.05,
-            bias="none",
-            task_type="CAUSAL_LM"
-        )
+        if self.use_lora:
+            # 1. Initialize PEFT configuration for True Self-Play (Shared Adapter)
+            lora_config = LoraConfig(
+                r=lora_r,
+                lora_alpha=32,
+                target_modules=["q_proj", "v_proj"],
+                lora_dropout=0.05,
+                bias="none",
+                task_type="CAUSAL_LM"
+            )
+            print("Attaching shared 'self_play' LoRA adapter...")
+            self.model = get_peft_model(base_model, lora_config, adapter_name="self_play")
+            self.model.set_adapter("self_play")
+            self.ref_model = None
+        else:
+            # 2. Full Adaptation (No PEFT)
+            print("Preparing Full Adaptation. Base model weights are trainable.")
+            self.model = base_model
+            # Ensure model requires grad
+            for param in self.model.parameters():
+                param.requires_grad = True
+                
+            # Must load a separate frozen model for the KL reference anchor
+            print("Loading separate frozen reference model for KL anchoring...")
+            self.ref_model = AutoModelForCausalLM.from_pretrained(
+                model_name,
+                dtype=dtype,
+            ).to(self.device)
+            self.ref_model.eval()
+            for param in self.ref_model.parameters():
+                param.requires_grad = False
 
-        print("Attaching 'generator' LoRA adapter...")
-        self.model = get_peft_model(base_model, lora_config, adapter_name="generator")
+        print("Model initialized successfully.")
 
-        # 2. Add the second adapter for the Fixer
-        print("Attaching 'fixer' LoRA adapter...")
-        self.model.add_adapter("fixer", lora_config)
-
-        # Default to generator active
-        self.model.set_adapter("generator")
-        print("Model initialized successfully with dual adapters.")
-
-    def set_active_role(self, role: str):
-        """Switches the active LoRA adapter (zero-cost pointer swap in PEFT)."""
-        if role not in ["generator", "fixer"]:
-            raise ValueError("Role must be 'generator' or 'fixer'")
-        self.model.set_adapter(role)
-
-    def batched_generate(self, prompts: list, adapter_name: str = "generator", max_tokens=256, temperature=0.7) -> list:
+    def get_reference_logits(self, input_ids, attention_mask=None):
         """
-        Generates responses for a batch of prompts using the specified adapter.
+        Abstracts the KL reference computation.
+        If using LoRA, disables the adapter temporarily.
+        If using Full Adaptation, routes the forward pass to the frozen ref_model.
         """
-        self.set_active_role(adapter_name)
+        with torch.no_grad():
+            if self.use_lora:
+                with self.model.disable_adapter():
+                    outputs = self.model(input_ids, attention_mask=attention_mask)
+            else:
+                outputs = self.ref_model(input_ids, attention_mask=attention_mask)
+        return outputs.logits
+
+    def batched_generate(self, prompts: list, max_tokens=256, temperature=0.7) -> list:
+        """
+        Generates responses for a batch of prompts using the shared model weights.
+        """
         self.model.eval()
 
         inputs = self.tokenizer(prompts, return_tensors="pt", add_special_tokens=False, padding=True).to(self.device)
@@ -87,7 +113,5 @@ class DualLoraCodeAgent:
 
         return responses
 
-
 if __name__ == "__main__":
-    # Simple compilation check (will only load model if run directly)
     pass
