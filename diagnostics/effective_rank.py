@@ -21,8 +21,14 @@ def measure_effective_rank(model, dataset, device):
         return hook
 
     # Hook the final layer norm before the lm_head
-    norm_layer = model.base_model.model.norm if hasattr(model, "base_model") else model.model.norm
-    hook = norm_layer.register_forward_hook(get_final_hidden_hook())
+    def get_core(m):
+        if hasattr(m, "layers"): return m
+        if hasattr(m, "model"): return get_core(m.model)
+        if hasattr(m, "base_model"): return get_core(m.base_model)
+        raise ValueError("Cannot find core transformer")
+
+    core = get_core(model)
+    hook = core.norm.register_forward_hook(get_final_hidden_hook())
     
     print("Running validation batches for Effective Rank calculation...")
     with torch.no_grad():

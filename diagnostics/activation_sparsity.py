@@ -27,9 +27,15 @@ def measure_dormant_neurons(model, dataset, device, tau=0.1):
 
     # Register hooks on the down_proj of every MLP layer
     # The input to down_proj is exactly the post-activation intermediate features!
+    def get_core(m):
+        if hasattr(m, "layers"): return m
+        if hasattr(m, "model"): return get_core(m.model)
+        if hasattr(m, "base_model"): return get_core(m.base_model)
+        raise ValueError("Cannot find core transformer")
+        
     hooks = []
-    layers = model.base_model.model.layers if hasattr(model, "base_model") else model.model.layers
-    for i, layer in enumerate(layers):
+    core = get_core(model)
+    for i, layer in enumerate(core.layers):
         hook = layer.mlp.down_proj.register_forward_hook(get_activation_hook(i))
         hooks.append(hook)
         

@@ -27,10 +27,16 @@ def measure_representational_warp(base_model, tuned_model, dataset, device):
     base_model.eval()
     tuned_model.eval()
     
-    base_layers = base_model.base_model.model.layers if hasattr(base_model, "base_model") else base_model.model.layers
-    tuned_layers = tuned_model.base_model.model.layers if hasattr(tuned_model, "base_model") else tuned_model.model.layers
+    def get_core(m):
+        if hasattr(m, "layers"): return m
+        if hasattr(m, "model"): return get_core(m.model)
+        if hasattr(m, "base_model"): return get_core(m.base_model)
+        raise ValueError("Cannot find core transformer")
+
+    core_base = get_core(base_model)
+    core_tuned = get_core(tuned_model)
     
-    num_layers = len(base_layers)
+    num_layers = len(core_base.layers)
     cka_scores = {}
     
     for layer_idx in range(num_layers):
@@ -46,8 +52,8 @@ def measure_representational_warp(base_model, tuned_model, dataset, device):
                 act_list.append(h)
             return hook
 
-        hook_base = base_layers[layer_idx].register_forward_hook(get_hook(base_acts))
-        hook_tuned = tuned_layers[layer_idx].register_forward_hook(get_hook(tuned_acts))
+        hook_base = core_base.layers[layer_idx].register_forward_hook(get_hook(base_acts))
+        hook_tuned = core_tuned.layers[layer_idx].register_forward_hook(get_hook(tuned_acts))
         
         print(f"Running Layer {layer_idx} CKA extraction...")
         with torch.no_grad():
