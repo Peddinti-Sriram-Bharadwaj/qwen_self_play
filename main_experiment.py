@@ -31,6 +31,7 @@ def run_experiment():
                         help="Known baseline pass@1 for eval_A (skips Phase 0 re-evaluation)")
     parser.add_argument("--base_eval_B", type=float, default=None,
                         help="Known baseline pass@1 for eval_B (skips Phase 0 re-evaluation)")
+    parser.add_argument("--no_mistake_book", action="store_true", help="Disable the Mistake Book (Ablation study)")
     args = parser.parse_args()
 
     use_lora = not args.full_finetune
@@ -81,7 +82,7 @@ def run_experiment():
 
     # --- PHASE 1: Training on Distribution A ---
     print(f"\n--- PHASE 1: Training on Distribution A ({args.phase_steps} steps) ---")
-    loop_A = CoderTesterSelfPlayLoop(agent=agent, dataset_path=f"{args.data_dir}/train_A.json", lr=1e-5, beta=args.beta)
+    loop_A = CoderTesterSelfPlayLoop(agent=agent, dataset_path=f"{args.data_dir}/train_A.json", lr=1e-5, beta=args.beta, use_mistake_book=not args.no_mistake_book)
 
     for step in range(1, args.phase_steps + 1):
         metrics = loop_A.run_step(G=args.G, K=args.K)
@@ -95,7 +96,7 @@ def run_experiment():
 
     # --- PHASE 2: Training on Distribution B ---
     print(f"\n--- PHASE 2: Training on Distribution B ({args.phase_steps} steps) ---")
-    loop_B = CoderTesterSelfPlayLoop(agent=agent, dataset_path=f"{args.data_dir}/train_B.json", lr=1e-5, beta=args.beta)
+    loop_B = CoderTesterSelfPlayLoop(agent=agent, dataset_path=f"{args.data_dir}/train_B.json", lr=1e-5, beta=args.beta, use_mistake_book=not args.no_mistake_book)
 
     for step in range(args.phase_steps + 1, (args.phase_steps * 2) + 1):
         metrics = loop_B.run_step(G=args.G, K=args.K)

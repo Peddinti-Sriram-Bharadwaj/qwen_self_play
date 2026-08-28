@@ -191,9 +191,10 @@ class CoderTesterSelfPlayLoop(GRPOSelfPlayLoop):
     Phase 3: Oracle Validation (Tester tests vs correct_code).
     Phase 4: Evaluation (Tester tests vs Coder code) & Reward computation.
     """
-    def __init__(self, agent: SelfPlayCodeAgent, dataset_path="data/train_A.json", lr=1e-5, beta=0.04):
+    def __init__(self, agent: SelfPlayCodeAgent, dataset_path="data/train_A.json", lr=1e-5, beta=0.04, use_mistake_book=True):
         super().__init__(agent, dataset_path, lr, beta)
         self.mistake_book = MistakeBook()
+        self.use_mistake_book = use_mistake_book
         self.current_step = 0
 
     def run_step(self, G=4, K=4):
@@ -222,7 +223,11 @@ class CoderTesterSelfPlayLoop(GRPOSelfPlayLoop):
         candidate_code = valid_coder_codes[0]
         
         # 2. Tester Phase
-        mistakes_str = self.mistake_book.retrieve_top_k(problem_id, k=10)
+        if self.use_mistake_book:
+            mistakes_str = self.mistake_book.retrieve_top_k(problem_id, k=10)
+        else:
+            mistakes_str = "No previous mistakes available."
+            
         raw_tester_prompts = [TESTER_PROMPT.format(
             problem=task["problem"], 
             candidate_code=candidate_code,
@@ -261,19 +266,27 @@ class CoderTesterSelfPlayLoop(GRPOSelfPlayLoop):
                 # Coder failed the valid test
                 coder_failed_tests.append(test)
                 # Check if this is a new failure in the Mistake Book
-                record = self.mistake_book.add_failure(problem_id, test, self.current_step)
-                if record["frequency"] == 1:
-                    tester_rewards[i] = 1.25 # New failure bonus
+                if self.use_mistake_book:
+                    record = self.mistake_book.add_failure(problem_id, test, self.current_step)
+                    if record["frequency"] == 1:
+                        tester_rewards[i] = 1.25 # New failure bonus
+                    else:
+                        tester_rewards[i] = 1.0 # Exposes failure
                 else:
-                    tester_rewards[i] = 1.0 # Exposes failure
+                    tester_rewards[i] = 1.0 # Exposes failure (no memory)
             else:
                 # Test is valid but Coder passes it
                 tester_rewards[i] = 0.0
-                self.mistake_book.mark_resolved(problem_id, test)
+                if self.use_mistake_book:
+                    self.mistake_book.mark_resolved(problem_id, test)
                 
         # Calculate Coder Reward
-        # For this step, we evaluate all parsed_coder_codes against baseline + all historical valid tests
-        all_historical_tests = self.mistake_book.get_all_tests(problem_id)
+        # For this step, we evaluate all parsed_coder_codes against baseline + tests
+        if self.use_mistake_book:
+            eval_tests = self.mistake_book.get_all_tests(problem_id)
+        else:
+            eval_tests = [t for i, t in valid_tests]
+            
         coder_rewards = []
         for code in parsed_coder_codes:
             if not code.strip():
@@ -283,7 +296,7 @@ class CoderTesterSelfPlayLoop(GRPOSelfPlayLoop):
             if not res_base.all_passed:
                 coder_rewards.append(0.0)
             else:
-                res_adv = evaluate_code(code, all_historical_tests)
+                res_adv = evaluate_code(code, eval_tests)
                 if res_adv.all_passed:
                     coder_rewards.append(1.0)
                 else:
