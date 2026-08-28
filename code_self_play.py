@@ -180,6 +180,159 @@ class GRPOSelfPlayLoop:
         }
 
 
+from mistake_book import MistakeBook
+from prompts import CODER_PROMPT, TESTER_PROMPT
+
+class CoderTesterSelfPlayLoop(GRPOSelfPlayLoop):
+    """
+    Implements the Adversarial Coder/Tester Co-evolution loop.
+    Phase 1: Coder generates solution.
+    Phase 2: Tester generates adversarial test guided by Mistake Book.
+    Phase 3: Oracle Validation (Tester tests vs correct_code).
+    Phase 4: Evaluation (Tester tests vs Coder code) & Reward computation.
+    """
+    def __init__(self, agent: SelfPlayCodeAgent, dataset_path="data/train_A.json", lr=1e-5, beta=0.04):
+        super().__init__(agent, dataset_path, lr, beta)
+        self.mistake_book = MistakeBook()
+        self.current_step = 0
+
+    def run_step(self, G=4, K=4):
+        self.current_step += 1
+        task = random.choice(self.train_tasks)
+        print(f"\n--- STEP {self.current_step}: Task {task['task_id']} ---")
+        return self._run_coder_tester_step(task, G, K)
+
+    def _run_coder_tester_step(self, task: dict, G: int, K: int):
+        problem_id = task["task_id"]
+        
+        # 1. Coder Phase
+        raw_coder_prompts = [CODER_PROMPT.format(problem=task["problem"])] * G
+        coder_prompts = [self._make_chat_prompt(p) for p in raw_coder_prompts]
+        
+        print("Sampling Coder...")
+        raw_coder_responses = self.agent.batched_generate(coder_prompts, max_tokens=400)
+        parsed_coder_codes = [extract_python_code(r) for r in raw_coder_responses]
+        
+        # For simplicity, we just use the first valid coder solution for the Tester to attack
+        valid_coder_codes = [code for code in parsed_coder_codes if code.strip() != ""]
+        if not valid_coder_codes:
+            print("Coder failed to produce code. Skipping step.")
+            return None
+            
+        candidate_code = valid_coder_codes[0]
+        
+        # 2. Tester Phase
+        mistakes_str = self.mistake_book.retrieve_top_k(problem_id, k=10)
+        raw_tester_prompts = [TESTER_PROMPT.format(
+            problem=task["problem"], 
+            candidate_code=candidate_code,
+            mistake_book=mistakes_str
+        )] * K
+        tester_prompts = [self._make_chat_prompt(p) for p in raw_tester_prompts]
+        
+        print("Sampling Tester...")
+        raw_tester_responses = self.agent.batched_generate(tester_prompts, max_tokens=200)
+        parsed_tests = [extract_python_code(r) for r in raw_tester_responses]
+        
+        # 3. Oracle Validation (Tester vs correct_code)
+        tester_rewards = []
+        valid_tests = []
+        for i, test in enumerate(parsed_tests):
+            if not test.strip().startswith("assert"):
+                 tester_rewards.append(-1.0)
+                 continue
+                 
+            # Run test against Oracle (correct_code)
+            oracle_res = evaluate_code(task["correct_code"], [test])
+            if oracle_res.all_passed:
+                valid_tests.append((i, test))
+            else:
+                tester_rewards.append(-1.0) # Invalid test
+                
+        # 4. Evaluation (Tester vs Coder)
+        # Pad tester_rewards with 0s for valid tests temporarily
+        for (i, test) in valid_tests:
+            tester_rewards.insert(i, 0.0) # Will update below
+            
+        coder_failed_tests = []
+        for (i, test) in valid_tests:
+            res = evaluate_code(candidate_code, [test])
+            if not res.all_passed:
+                # Coder failed the valid test
+                coder_failed_tests.append(test)
+                # Check if this is a new failure in the Mistake Book
+                record = self.mistake_book.add_failure(problem_id, test, self.current_step)
+                if record["frequency"] == 1:
+                    tester_rewards[i] = 1.25 # New failure bonus
+                else:
+                    tester_rewards[i] = 1.0 # Exposes failure
+            else:
+                # Test is valid but Coder passes it
+                tester_rewards[i] = 0.0
+                self.mistake_book.mark_resolved(problem_id, test)
+                
+        # Calculate Coder Reward
+        # For this step, we evaluate all parsed_coder_codes against baseline + all historical valid tests
+        all_historical_tests = self.mistake_book.get_all_tests(problem_id)
+        coder_rewards = []
+        for code in parsed_coder_codes:
+            if not code.strip():
+                coder_rewards.append(-1.0)
+                continue
+            res_base = evaluate_code(code, task["tests"])
+            if not res_base.all_passed:
+                coder_rewards.append(0.0)
+            else:
+                res_adv = evaluate_code(code, all_historical_tests)
+                if res_adv.all_passed:
+                    coder_rewards.append(1.0)
+                else:
+                    coder_rewards.append(0.5) # Partially correct
+                    
+        tester_advantages = np.array(tester_rewards)
+        if np.std(tester_advantages) > 1e-8:
+            tester_advantages = (tester_advantages - np.mean(tester_advantages)) / (np.std(tester_advantages) + 1e-8)
+        else:
+            tester_advantages = tester_advantages - np.mean(tester_advantages)
+            
+        coder_advantages = np.array(coder_rewards)
+        if np.std(coder_advantages) > 1e-8:
+            coder_advantages = (coder_advantages - np.mean(coder_advantages)) / (np.std(coder_advantages) + 1e-8)
+        else:
+            coder_advantages = coder_advantages - np.mean(coder_advantages)
+            
+        self.optimizer.zero_grad()
+        
+        print("Computing Tester GRPO Loss...")
+        tester_loss = self.compute_grpo_loss(
+            prompts=tester_prompts,
+            responses=raw_tester_responses,
+            advantages=torch.tensor(tester_advantages, dtype=torch.float32).to(self.agent.device)
+        )
+        
+        print("Computing Coder GRPO Loss...")
+        coder_loss = self.compute_grpo_loss(
+            prompts=coder_prompts,
+            responses=raw_coder_responses,
+            advantages=torch.tensor(coder_advantages, dtype=torch.float32).to(self.agent.device)
+        )
+        
+        self.optimizer.step()
+        
+        empirical_tester_success = np.mean([r > 0 for r in tester_rewards])
+        empirical_coder_success = np.mean([r > 0 for r in coder_rewards])
+        
+        print(f"Step Complete. Coder Loss: {coder_loss:.4f} | Tester Loss: {tester_loss:.4f}")
+        print(f"Coder Success: {empirical_coder_success:.2f} | Tester Success: {empirical_tester_success:.2f}")
+        
+        return {
+            "coder_loss": coder_loss,
+            "tester_loss": tester_loss,
+            "coder_success_rate": empirical_coder_success,
+            "tester_success_rate": empirical_tester_success
+        }
+
+
 if __name__ == "__main__":
     import os
     import argparse

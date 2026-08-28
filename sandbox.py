@@ -33,7 +33,19 @@ def evaluate_code(code: str, test_cases: list, timeout: int = 3) -> SandboxResul
 
     # 2. Build the test harness
     # Append test cases directly — they're multi-line blocks (e.g. def check(...): ...)
-    script = code + "\n\n"
+    script = """
+import resource
+import sys
+# Set memory limit to 256MB to prevent adversarial tester from freezing sandbox
+def set_memory_limit():
+    megabytes = 256
+    try:
+        resource.setrlimit(resource.RLIMIT_AS, (megabytes * 1024 * 1024, megabytes * 1024 * 1024))
+    except (ValueError, OSError):
+        pass # Not supported on all OS, but attempts to protect
+set_memory_limit()
+"""
+    script += code + "\n\n"
     for test in test_cases:
         script += f"{test}\n"
     script += "print('ALL_TESTS_PASSED')\n"
