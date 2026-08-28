@@ -26,7 +26,7 @@ def load_base_model(model_name, device):
 
 def load_lora_model(base_model, lora_path):
     print(f"Loading LoRA Model from {lora_path}")
-    lora_model = PeftModel.from_pretrained(base_model, lora_path)
+    lora_model = PeftModel.from_pretrained(base_model, lora_path, is_trainable=True)
     return lora_model
 
 def load_full_model(full_path, device):

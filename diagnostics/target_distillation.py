@@ -48,13 +48,14 @@ def run_target_distillation(model, dataset, device, steps=50):
     # Ensure model is in train mode (but only train the base weights or adapter weights depending on the model state)
     model.train()
     
-    # Use a fresh optimizer for this diagnostic run
-    optimizer = AdamW(model.parameters(), lr=5e-5)
+    # Use a fresh optimizer for this diagnostic run (only optimizing trainable weights)
+    trainable_params = [p for p in model.parameters() if p.requires_grad]
+    optimizer = AdamW(trainable_params, lr=5e-5)
     criterion = nn.CrossEntropyLoss()
     
     loss_curve = []
     
-    for step in range(steps):
+    for step in tqdm(range(steps), desc="Control Target Distillation Steps"):
         total_loss = 0
         for seq in dataset:
             seq = seq.unsqueeze(0).to(device) # Batch size 1
