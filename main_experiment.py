@@ -23,6 +23,7 @@ def run_experiment():
     parser.add_argument("--K", type=int, default=4)
     parser.add_argument("--G", type=int, default=4)
     parser.add_argument("--full_finetune", action="store_true", help="Use Full Adaptation instead of LoRA")
+    parser.add_argument("--ckpt_dir", type=str, default="checkpoints", help="Directory to save checkpoints")
     # Skip Phase 0 and inject known baseline values directly (useful after a crash recovery)
     parser.add_argument("--base_eval_A", type=float, default=None,
                         help="Known baseline pass@1 for eval_A (skips Phase 0 re-evaluation)")
@@ -86,7 +87,7 @@ def run_experiment():
             log_metrics(step, "Phase_A", metrics)
 
         if step % args.eval_freq == 0:
-            ckpt_path = f"checkpoints/phaseA_step_{step}_self_play"
+            ckpt_path = f"{args.ckpt_dir}/phaseA_step_{step}_self_play"
             agent.model.save_pretrained(ckpt_path)
             run_evals(step, ckpt_path)
 
@@ -100,7 +101,7 @@ def run_experiment():
             log_metrics(step, "Phase_B", metrics)
 
         if step % args.eval_freq == 0:
-            ckpt_path = f"checkpoints/phaseB_step_{step}_self_play"
+            ckpt_path = f"{args.ckpt_dir}/phaseB_step_{step}_self_play"
             agent.model.save_pretrained(ckpt_path)
             run_evals(step, ckpt_path)
 
