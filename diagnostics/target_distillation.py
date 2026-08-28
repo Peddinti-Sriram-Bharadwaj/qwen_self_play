@@ -38,6 +38,16 @@ def generate_distillation_datasets(tokenizer):
         hard_tokens.append(tokens)
     datasets["hard"] = hard_tokens
 
+    # --- RELEARN: 10-shot MBPP Phase A (Old Task) ---
+    with open("data/train_A.json", "r") as f:
+        mbpp_a = json.load(f)[:10]
+    relearn_tokens = []
+    for task in mbpp_a:
+        text = f"Problem: {task['problem']}\nSolution:\n{task['correct_code']}"
+        tokens = tokenizer(text, return_tensors="pt")["input_ids"][0][:100]
+        relearn_tokens.append(tokens)
+    datasets["relearn"] = relearn_tokens
+
     return datasets
 
 def run_target_distillation(model, dataset, device, steps=50):
