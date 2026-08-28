@@ -35,6 +35,7 @@ def run_experiment():
     use_lora = not args.full_finetune
 
     wandb.init(project="anchored_code_self_play", name=args.run_name,
+               config={"beta": args.beta, "K": args.K, "G": args.G, "use_lora": use_lora, "model_name": args.model_name})
 
     print(f"Initializing SelfPlay Agent (use_lora={use_lora}) with {args.model_name}...")
     agent = SelfPlayCodeAgent(model_name=args.model_name, use_lora=use_lora)
