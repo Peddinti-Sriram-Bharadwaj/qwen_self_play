@@ -28,7 +28,8 @@ def measure_dormant_neurons(model, dataset, device, tau=0.1):
     # Register hooks on the down_proj of every MLP layer
     # The input to down_proj is exactly the post-activation intermediate features!
     hooks = []
-    for i, layer in enumerate(model.model.layers):
+    layers = model.base_model.model.layers if hasattr(model, "base_model") else model.model.layers
+    for i, layer in enumerate(layers):
         hook = layer.mlp.down_proj.register_forward_hook(get_activation_hook(i))
         hooks.append(hook)
         

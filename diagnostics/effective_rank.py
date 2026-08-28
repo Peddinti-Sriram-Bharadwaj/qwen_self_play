@@ -21,7 +21,8 @@ def measure_effective_rank(model, dataset, device):
         return hook
 
     # Hook the final layer norm before the lm_head
-    hook = model.model.norm.register_forward_hook(get_final_hidden_hook())
+    norm_layer = model.base_model.model.norm if hasattr(model, "base_model") else model.model.norm
+    hook = norm_layer.register_forward_hook(get_final_hidden_hook())
     
     print("Running validation batches for Effective Rank calculation...")
     with torch.no_grad():

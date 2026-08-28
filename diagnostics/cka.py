@@ -27,7 +27,10 @@ def measure_representational_warp(base_model, tuned_model, dataset, device):
     base_model.eval()
     tuned_model.eval()
     
-    num_layers = len(base_model.model.layers)
+    base_layers = base_model.base_model.model.layers if hasattr(base_model, "base_model") else base_model.model.layers
+    tuned_layers = tuned_model.base_model.model.layers if hasattr(tuned_model, "base_model") else tuned_model.model.layers
+    
+    num_layers = len(base_layers)
     cka_scores = {}
     
     for layer_idx in range(num_layers):
@@ -43,8 +46,8 @@ def measure_representational_warp(base_model, tuned_model, dataset, device):
                 act_list.append(h)
             return hook
 
-        hook_base = base_model.model.layers[layer_idx].register_forward_hook(get_hook(base_acts))
-        hook_tuned = tuned_model.model.layers[layer_idx].register_forward_hook(get_hook(tuned_acts))
+        hook_base = base_layers[layer_idx].register_forward_hook(get_hook(base_acts))
+        hook_tuned = tuned_layers[layer_idx].register_forward_hook(get_hook(tuned_acts))
         
         print(f"Running Layer {layer_idx} CKA extraction...")
         with torch.no_grad():
