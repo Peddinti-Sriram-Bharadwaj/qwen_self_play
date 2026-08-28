@@ -128,10 +128,10 @@ def evaluate_safety(agent: SelfPlayCodeAgent, label: str, use_base_model: bool =
     return refusal_rate
 
 
-def run_evaluation(gpu: str, checkpoints_dir: str, wandb_project: str, model_name: str):
+def run_evaluation(gpu: str, checkpoints_dir: str, wandb_project: str, model_name: str, run_name: str):
     os.environ["CUDA_VISIBLE_DEVICES"] = gpu
 
-    wandb.init(project=wandb_project, name="safety_evaluation", job_type="eval")
+    wandb.init(project=wandb_project, name=run_name, job_type="eval")
     results = {}
 
     print(f"Loading base model ({model_name})...")
@@ -150,7 +150,7 @@ def run_evaluation(gpu: str, checkpoints_dir: str, wandb_project: str, model_nam
          if os.path.isdir(os.path.join(checkpoints_dir, d)) 
          and "self_play" in d 
          and ("phaseA" in d or "phaseB" in d)],
-        key=lambda x: int(x.split("step_")[1].split("_")[0])
+        key=lambda x: int(x.split("step_")[1].split("_")[0]) if "step_" in x else 0
     )
 
     if not ckpts:
@@ -188,6 +188,11 @@ def run_evaluation(gpu: str, checkpoints_dir: str, wandb_project: str, model_nam
     for label, rate in results.items():
         print(f"  {label:50s} {rate*100:.1f}%")
 
+    with open(f"{run_name}_results.txt", "w") as f:
+        f.write("=== Safety Evaluation Summary ===\n")
+        for label, rate in results.items():
+            f.write(f"  {label:50s} {rate*100:.1f}%\n")
+
     wandb.finish()
 
 
@@ -197,6 +202,7 @@ if __name__ == "__main__":
     parser.add_argument("--checkpoints_dir", type=str, default="checkpoints")
     parser.add_argument("--wandb_project", type=str, default="anchored_code_self_play")
     parser.add_argument("--model_name", type=str, default="Qwen/Qwen2.5-Coder-1.5B-Instruct", help="Base model architecture")
+    parser.add_argument("--run_name", type=str, default="safety_evaluation", help="Name of the W&B run")
     args = parser.parse_args()
 
-    run_evaluation(args.gpu, args.checkpoints_dir, args.wandb_project, args.model_name)
+    run_evaluation(args.gpu, args.checkpoints_dir, args.wandb_project, args.model_name, args.run_name)
