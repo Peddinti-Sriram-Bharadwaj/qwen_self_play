@@ -155,7 +155,10 @@ def run_experiment(base_model_path, rl_checkpoint_path=None):
     
     # 4. Train Baseline Safety Classifier
     print("\nTraining downstream safety classifier (Logistic Regression)...")
-    clf = LogisticRegression(max_iter=1000)
+    # We must use strong L2 regularization (C=0.01) to force the classifier to learn a realistic, 
+    # tight margin. Because we are operating in D > N space (896 dims vs 784 samples), a default 
+    # unregularized model can find spurious infinite margins, rendering it artificially immune to drift.
+    clf = LogisticRegression(max_iter=1000, C=0.01)
     clf.fit(X_train, y_train)
     
     base_auc, base_conf, _ = evaluate_classifier_at_scale(clf, X_eval, y_eval)
@@ -203,37 +206,50 @@ def run_experiment(base_model_path, rl_checkpoint_path=None):
     plt.savefig(plot_path, dpi=300)
     print(f"\nPlot saved to {plot_path}")
     
-    # 7. Actual RL Checkpoint Evaluation
-    if rl_checkpoint_path:
+    # 7. Actual RL Checkpoints Evaluation
+    if rl_checkpoints_dir:
         print(f"\n==================================================")
-        print(f" Evaluating Actual RL Checkpoint Drift")
-        print(f" Loading model: {rl_checkpoint_path}")
+        print(f" Evaluating Actual RL Checkpoint Drift over Time")
+        print(f" Directory: {rl_checkpoints_dir}")
         print(f"==================================================")
         
         del model
         torch.cuda.empty_cache()
         
-        drift_model = AutoModelForCausalLM.from_pretrained(
-            rl_checkpoint_path, 
-            torch_dtype=torch.bfloat16, 
-            device_map="auto"
-        )
+        import os, glob
+        # Find all checkpoints in the provided directory
+        checkpoints = sorted(glob.glob(os.path.join(rl_checkpoints_dir, "phase*_step_*")))
         
-        print(f"Extracting RL drifted embeddings for {len(eval_prompts)} test prompts...")
-        X_rl = extract_last_token_embeddings(drift_model, tokenizer, eval_prompts)
-        
-        # Normalize the RL embeddings
-        X_rl_norms = np.linalg.norm(X_rl, axis=1, keepdims=True)
-        X_rl_normalized = X_rl / X_rl_norms
-        
-        rl_auc, rl_conf, rl_sfr = evaluate_classifier_at_scale(clf, X_rl_normalized, y_eval)
-        print(f"  Actual RL Drift | ROC-AUC: {rl_auc:.3f} | Mean Conf: {rl_conf:.3f} | Silent Fail Rate: {rl_sfr*100:.1f}%")
-
+        if not checkpoints:
+            print("No checkpoints found in the directory.")
+        else:
+            for ckpt_path in checkpoints:
+                step_name = os.path.basename(ckpt_path)
+                print(f"\nLoading model: {step_name}...")
+                
+                drift_model = AutoModelForCausalLM.from_pretrained(
+                    ckpt_path, 
+                    torch_dtype=torch.bfloat16, 
+                    device_map="auto"
+                )
+                
+                print(f"Extracting RL drifted embeddings for {len(eval_prompts)} test prompts...")
+                X_rl = extract_last_token_embeddings(drift_model, tokenizer, eval_prompts)
+                
+                # Normalize the RL embeddings
+                X_rl_norms = np.linalg.norm(X_rl, axis=1, keepdims=True)
+                X_rl_normalized = X_rl / X_rl_norms
+                
+                rl_auc, rl_conf, rl_sfr = evaluate_classifier_at_scale(clf, X_rl_normalized, y_eval)
+                print(f"  [{step_name}] | ROC-AUC: {rl_auc:.3f} | Mean Conf: {rl_conf:.3f} | Silent Fail Rate: {rl_sfr*100:.1f}%")
+                
+                del drift_model
+                torch.cuda.empty_cache()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--base_model", type=str, default="Qwen/Qwen2.5-Coder-0.5B-Instruct")
-    parser.add_argument("--rl_checkpoint", type=str, default="", help="Path to Step 400 RL checkpoint")
+    parser.add_argument("--rl_checkpoints_dir", type=str, default="", help="Directory containing all RL checkpoints")
     args = parser.parse_args()
     
-    run_experiment(args.base_model, args.rl_checkpoint)
+    run_experiment(args.base_model, args.rl_checkpoints_dir)
