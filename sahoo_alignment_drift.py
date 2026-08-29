@@ -124,7 +124,7 @@ def evaluate_classifier_at_scale(clf, X, y):
         
     return roc_auc, mean_confidence, silent_failure_rate
 
-def run_experiment(base_model_path, rl_checkpoint_path=None):
+def run_experiment(base_model_path, rl_checkpoints_dir=None):
     print("="*50)
     print(" SAHOO EXPERIMENT A: SPHERICAL EMBEDDING DRIFT")
     print("="*50)
