@@ -57,7 +57,7 @@ CODING_TASKS = [
 ]
 
 def generate_response(model, tokenizer, prompt, max_new_tokens=512):
-    """Generate a single response and return logits, tokens, and text."""
+    """Generate a single response and return entropy, length, and text."""
     formatted = tokenizer.apply_chat_template(
         [{"role": "user", "content": prompt}],
         tokenize=False,
@@ -71,41 +71,33 @@ def generate_response(model, tokenizer, prompt, max_new_tokens=512):
         outputs = model.generate(
             **inputs,
             max_new_tokens=max_new_tokens,
-            do_sample=False,  # Greedy decoding for reproducibility
+            do_sample=False,
             return_dict_in_generate=True,
             output_scores=True,
         )
     
     # Generated token IDs (excluding prompt)
     generated_ids = outputs.sequences[0][input_len:]
+    response_text = tokenizer.decode(generated_ids, skip_special_tokens=True)
     
-    # Stack scores: (num_new_tokens, vocab_size)
-    scores = torch.stack(outputs.scores, dim=0)  # (T, V)
-    log_probs = torch.log_softmax(scores.float(), dim=-1)
+    # Stack scores: (T, V) — these are raw logits, no token ID indexing needed
+    scores = torch.stack(outputs.scores, dim=0).float()  # (T, V)
     
-    # Guard: generated_ids may include EOS; scores always has one entry per step
-    min_len = min(len(generated_ids), len(scores))
-    generated_ids = generated_ids[:min_len]
-    log_probs = log_probs[:min_len]
-    
-    # Token-level entropy: H = -sum(p * log_p)
-    probs = torch.softmax(scores[:min_len].float(), dim=-1)
+    # Entropy: H = -sum(p * log_p) per token, averaged
+    log_probs = torch.log_softmax(scores, dim=-1)
+    probs = torch.exp(log_probs)
     token_entropies = -(probs * log_probs).sum(dim=-1)  # (T,)
     mean_entropy = token_entropies.mean().item()
     
-    # Greedy token log-probs — keep indexing on the same device as log_probs
-    t_idx = torch.arange(min_len, device=log_probs.device)
-    token_ids_device = generated_ids.to(log_probs.device)
-    generated_log_probs = log_probs[t_idx, token_ids_device]
-    
-    response_text = tokenizer.decode(generated_ids, skip_special_tokens=True)
+    # Store mean score vector per step (mean over vocab dim) for disagreement proxy
+    # This avoids any per-token-ID indexing while still capturing distributional shift
+    mean_score_per_step = scores.mean(dim=-1).cpu().numpy()  # (T,)
     
     return {
         "text": response_text,
         "length": len(generated_ids),
         "mean_entropy": mean_entropy,
-        "token_entropies": token_entropies.cpu().numpy(),
-        "token_log_probs": generated_log_probs.cpu().numpy(),
+        "mean_score_per_step": mean_score_per_step,
     }
 
 def compute_reward_hack_score(response_text, task):
@@ -126,18 +118,16 @@ def compute_reward_hack_score(response_text, task):
     hack_score = (1 - keyword_coverage) + (1.0 if is_boilerplate else 0.0)
     return hack_score, keyword_coverage, is_boilerplate
 
-def compute_ensemble_disagreement(base_log_probs, rl_log_probs):
+def compute_ensemble_disagreement(base_scores, rl_scores):
     """
-    Epistemic uncertainty = variance of token-level log probabilities
-    between the base model and the RL checkpoint.
+    Epistemic uncertainty proxy = L2 distance between per-step mean score vectors.
+    Higher = RL model's output distribution has drifted further from base.
     """
-    min_len = min(len(base_log_probs), len(rl_log_probs))
+    min_len = min(len(base_scores), len(rl_scores))
     if min_len == 0:
         return 0.0
-    
-    stacked = np.stack([base_log_probs[:min_len], rl_log_probs[:min_len]], axis=0)
-    variance = np.var(stacked, axis=0).mean()
-    return variance
+    diff = base_scores[:min_len] - rl_scores[:min_len]
+    return float(np.sqrt(np.mean(diff ** 2)))
 
 def run_diagnostics(base_model_path, rl_checkpoints_dir):
     print("=" * 60)
@@ -210,12 +200,12 @@ def run_diagnostics(base_model_path, rl_checkpoints_dir):
                 "is_boilerplate": is_boilerplate,
             }
         
-        # Compute disagreement vs base model
+        # Compute disagreement vs base model using per-step mean score distance
         disagree_scores = []
         for task_id in base_results:
             d = compute_ensemble_disagreement(
-                base_results[task_id]["token_log_probs"],
-                rl_results[task_id]["token_log_probs"],
+                base_results[task_id]["mean_score_per_step"],
+                rl_results[task_id]["mean_score_per_step"],
             )
             disagree_scores.append(d)
         
