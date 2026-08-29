@@ -124,7 +124,7 @@ def evaluate_classifier_at_scale(clf, X, y):
         
     return roc_auc, mean_confidence, silent_failure_rate
 
-def run_experiment(base_model_path):
+def run_experiment(base_model_path, rl_checkpoint_path=None):
     print("="*50)
     print(" SAHOO EXPERIMENT A: SPHERICAL EMBEDDING DRIFT")
     print("="*50)
@@ -148,8 +148,9 @@ def run_experiment(base_model_path):
     X_normalized = X / norms
     
     # 3. Split dataset
-    X_train, X_eval, y_train, y_eval = train_test_split(
-        X_normalized, LABELS, test_size=0.2, random_state=42
+    # We must also split the PROMPTS so we can pass the exact same test prompts to the RL model
+    X_train, X_eval, y_train, y_eval, _, eval_prompts = train_test_split(
+        X_normalized, LABELS, PROMPTS, test_size=0.2, random_state=42
     )
     
     # 4. Train Baseline Safety Classifier
@@ -201,10 +202,38 @@ def run_experiment(base_model_path):
     plot_path = "sahoo_drift_collapse_plot.png"
     plt.savefig(plot_path, dpi=300)
     print(f"\nPlot saved to {plot_path}")
+    
+    # 7. Actual RL Checkpoint Evaluation
+    if rl_checkpoint_path:
+        print(f"\n==================================================")
+        print(f" Evaluating Actual RL Checkpoint Drift")
+        print(f" Loading model: {rl_checkpoint_path}")
+        print(f"==================================================")
+        
+        del model
+        torch.cuda.empty_cache()
+        
+        drift_model = AutoModelForCausalLM.from_pretrained(
+            rl_checkpoint_path, 
+            torch_dtype=torch.bfloat16, 
+            device_map="auto"
+        )
+        
+        print(f"Extracting RL drifted embeddings for {len(eval_prompts)} test prompts...")
+        X_rl = extract_last_token_embeddings(drift_model, tokenizer, eval_prompts)
+        
+        # Normalize the RL embeddings
+        X_rl_norms = np.linalg.norm(X_rl, axis=1, keepdims=True)
+        X_rl_normalized = X_rl / X_rl_norms
+        
+        rl_auc, rl_conf, rl_sfr = evaluate_classifier_at_scale(clf, X_rl_normalized, y_eval)
+        print(f"  Actual RL Drift | ROC-AUC: {rl_auc:.3f} | Mean Conf: {rl_conf:.3f} | Silent Fail Rate: {rl_sfr*100:.1f}%")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--base_model", type=str, default="Qwen/Qwen2.5-Coder-0.5B-Instruct")
+    parser.add_argument("--rl_checkpoint", type=str, default="", help="Path to Step 400 RL checkpoint")
     args = parser.parse_args()
     
-    run_experiment(args.base_model)
+    run_experiment(args.base_model, args.rl_checkpoint)
