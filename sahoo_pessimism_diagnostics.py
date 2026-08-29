@@ -81,15 +81,22 @@ def generate_response(model, tokenizer, prompt, max_new_tokens=512):
     
     # Stack scores: (num_new_tokens, vocab_size)
     scores = torch.stack(outputs.scores, dim=0)  # (T, V)
-    log_probs = torch.log_softmax(scores, dim=-1)
+    log_probs = torch.log_softmax(scores.float(), dim=-1)
+    
+    # Guard: generated_ids may include EOS; scores always has one entry per step
+    min_len = min(len(generated_ids), len(scores))
+    generated_ids = generated_ids[:min_len]
+    log_probs = log_probs[:min_len]
     
     # Token-level entropy: H = -sum(p * log_p)
-    probs = torch.softmax(scores, dim=-1)
+    probs = torch.softmax(scores[:min_len].float(), dim=-1)
     token_entropies = -(probs * log_probs).sum(dim=-1)  # (T,)
     mean_entropy = token_entropies.mean().item()
     
-    # Greedy token log-probs
-    generated_log_probs = log_probs[torch.arange(len(generated_ids)), generated_ids]
+    # Greedy token log-probs — keep indexing on the same device as log_probs
+    t_idx = torch.arange(min_len, device=log_probs.device)
+    token_ids_device = generated_ids.to(log_probs.device)
+    generated_log_probs = log_probs[t_idx, token_ids_device]
     
     response_text = tokenizer.decode(generated_ids, skip_special_tokens=True)
     
