@@ -155,17 +155,17 @@ def run_experiment(base_model_path, rl_checkpoints_dir=None):
     
     # 4. Train Baseline Safety Classifier
     print("\nTraining downstream safety classifier (Logistic Regression)...")
-    # We must use strong L2 regularization (C=0.01) to force the classifier to learn a realistic, 
-    # tight margin. Because we are operating in D > N space (896 dims vs 784 samples), a default 
-    # unregularized model can find spurious infinite margins, rendering it artificially immune to drift.
-    clf = LogisticRegression(max_iter=1000, C=0.01)
+    clf = LogisticRegression(max_iter=1000)
     clf.fit(X_train, y_train)
     
     base_auc, base_conf, _ = evaluate_classifier_at_scale(clf, X_eval, y_eval)
     print(f"Baseline (Clean) Eval - ROC-AUC: {base_auc:.3f}, Mean Confidence: {base_conf:.3f}")
     
     # 5. Sweep sigma and track metrics
-    sigmas = [0.0, 0.005, 0.01, 0.015, 0.02, 0.025, 0.03, 0.04, 0.05]
+    # Because our toy dataset only has 784 points, the embedding space (D=896) is incredibly sparse.
+    # This sparsity creates a massive margin between classes, unlike real 50k+ datasets.
+    # We must sweep sigma much higher (up to 1.0, or 45 degrees of drift) to find the collapse boundary!
+    sigmas = [0.0, 0.02, 0.05, 0.1, 0.2, 0.3, 0.5, 0.7, 0.9, 1.0]
     aucs = []
     confs = []
     silent_fail_rates = []
