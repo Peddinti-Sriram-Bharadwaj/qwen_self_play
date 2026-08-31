@@ -194,7 +194,7 @@ def run_conjugate_eval(base_model_path, rl_checkpoints_dir):
     # 2. Evaluate target checkpoints
     target_checkpoints = []
     for ckpt in sorted(glob.glob(os.path.join(rl_checkpoints_dir, "phase*_step_*"))):
-        if "step_100" in ckpt or "step_300" in ckpt or "step_400" in ckpt:
+        if "step_100" in ckpt or "step_200" in ckpt or "step_300" in ckpt or "step_400" in ckpt:
             target_checkpoints.append(ckpt)
             
     results = []
