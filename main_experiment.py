@@ -37,6 +37,7 @@ def run_experiment():
     parser.add_argument("--base_eval_B", type=float, default=None,
                         help="Known baseline pass@1 for eval_B (skips Phase 0 re-evaluation)")
     parser.add_argument("--no_mistake_book", action="store_true", help="Disable the Mistake Book (Ablation study)")
+    parser.add_argument("--skip_phase2", action="store_true", help="Skip Phase 2 training")
     args = parser.parse_args()
 
     use_lora = not args.full_finetune
@@ -107,19 +108,20 @@ def run_experiment():
             run_evals(step, ckpt_path)
 
     # --- PHASE 2: Training on Distribution B ---
-    print(f"\n--- PHASE 2: Training on Distribution B ({args.phase_steps} steps) ---")
-    loop_B = CoderTesterSelfPlayLoop(agent=agent, dataset_path=f"{args.data_dir}/train_B.json", lr=args.lr, beta=args.beta, use_mistake_book=not args.no_mistake_book)
-
-    for step in range(args.phase_steps + 1, (args.phase_steps * 2) + 1):
-        metrics = loop_B.run_step(G=args.G, K=args.K)
-        if metrics:
-            log_metrics(step, "Phase_B", metrics)
-
-        if step % args.eval_freq == 0:
-            ckpt_path = f"{args.ckpt_dir}/phaseB_step_{step}_self_play"
-            agent.model.save_pretrained(ckpt_path)
-            run_evals(step, ckpt_path)
-
+    if not args.skip_phase2:
+        print(f"\n--- PHASE 2: Training on Distribution B ({args.phase_steps} steps) ---")
+        loop_B = CoderTesterSelfPlayLoop(agent=agent, dataset_path=f"{args.data_dir}/train_B.json", lr=args.lr, beta=args.beta, use_mistake_book=not args.no_mistake_book)
+    
+        for step in range(args.phase_steps + 1, (args.phase_steps * 2) + 1):
+            metrics = loop_B.run_step(G=args.G, K=args.K)
+            if metrics:
+                log_metrics(step, "Phase_B", metrics)
+    
+            if step % args.eval_freq == 0:
+                ckpt_path = f"{args.ckpt_dir}/phaseB_step_{step}_self_play"
+                agent.model.save_pretrained(ckpt_path)
+                run_evals(step, ckpt_path)
+            
     print("\n--- EXPERIMENT COMPLETE ---")
 
 
