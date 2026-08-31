@@ -16,7 +16,8 @@ from evaluate import evaluate_checkpoint
 def run_experiment():
     parser = argparse.ArgumentParser(description="Strict Multi-Phase Catastrophic Forgetting Experiment (True Self Play)")
     parser.add_argument("--gpu", type=str, default="0")
-    parser.add_argument("--beta", type=float, default=0.04)
+    parser.add_argument("--beta", type=float, default=0.01)
+    parser.add_argument("--lr", type=float, default=1e-5, help="Learning rate for GRPO")
     parser.add_argument("--run-name", type=str, default="strict_forgetting_eval")
     parser.add_argument("--model_name", type=str, default="Qwen/Qwen2.5-Coder-1.5B-Instruct")
     parser.add_argument("--phase_steps", type=int, default=200, help="Steps per phase")
@@ -37,7 +38,7 @@ def run_experiment():
     use_lora = not args.full_finetune
 
     wandb.init(project="anchored_code_self_play", name=args.run_name,
-               config={"beta": args.beta, "K": args.K, "G": args.G, "use_lora": use_lora, "model_name": args.model_name})
+               config={"beta": args.beta, "lr": args.lr, "K": args.K, "G": args.G, "use_lora": use_lora, "model_name": args.model_name})
 
     print(f"Initializing SelfPlay Agent (use_lora={use_lora}) with {args.model_name}...")
     agent = SelfPlayCodeAgent(model_name=args.model_name, use_lora=use_lora)
@@ -82,7 +83,7 @@ def run_experiment():
 
     # --- PHASE 1: Training on Distribution A ---
     print(f"\n--- PHASE 1: Training on Distribution A ({args.phase_steps} steps) ---")
-    loop_A = CoderTesterSelfPlayLoop(agent=agent, dataset_path=f"{args.data_dir}/train_A.json", lr=1e-5, beta=args.beta, use_mistake_book=not args.no_mistake_book)
+    loop_A = CoderTesterSelfPlayLoop(agent=agent, dataset_path=f"{args.data_dir}/train_A.json", lr=args.lr, beta=args.beta, use_mistake_book=not args.no_mistake_book)
 
     for step in range(1, args.phase_steps + 1):
         metrics = loop_A.run_step(G=args.G, K=args.K)
@@ -96,7 +97,7 @@ def run_experiment():
 
     # --- PHASE 2: Training on Distribution B ---
     print(f"\n--- PHASE 2: Training on Distribution B ({args.phase_steps} steps) ---")
-    loop_B = CoderTesterSelfPlayLoop(agent=agent, dataset_path=f"{args.data_dir}/train_B.json", lr=1e-5, beta=args.beta, use_mistake_book=not args.no_mistake_book)
+    loop_B = CoderTesterSelfPlayLoop(agent=agent, dataset_path=f"{args.data_dir}/train_B.json", lr=args.lr, beta=args.beta, use_mistake_book=not args.no_mistake_book)
 
     for step in range(args.phase_steps + 1, (args.phase_steps * 2) + 1):
         metrics = loop_B.run_step(G=args.G, K=args.K)
