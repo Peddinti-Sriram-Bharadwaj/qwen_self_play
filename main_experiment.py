@@ -8,6 +8,9 @@ _args, _ = _parser.parse_known_args()
 os.environ["CUDA_VISIBLE_DEVICES"] = _args.gpu
 
 import wandb
+import torch
+import random
+import numpy as np
 from code_self_play import CoderTesterSelfPlayLoop, GRPOSelfPlayLoop
 from code_agent import SelfPlayCodeAgent
 from evaluate import evaluate_checkpoint
@@ -19,6 +22,7 @@ def run_experiment():
     parser.add_argument("--beta", type=float, default=0.01)
     parser.add_argument("--lr", type=float, default=1e-5, help="Learning rate for GRPO")
     parser.add_argument("--run-name", type=str, default="strict_forgetting_eval")
+    parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
     parser.add_argument("--model_name", type=str, default="Qwen/Qwen2.5-Coder-1.5B-Instruct")
     parser.add_argument("--phase_steps", type=int, default=200, help="Steps per phase")
     parser.add_argument("--eval_freq", type=int, default=100, help="Evaluate every N steps")
@@ -37,10 +41,17 @@ def run_experiment():
 
     use_lora = not args.full_finetune
 
-    wandb.init(project="anchored_code_self_play", name=args.run_name,
-               config={"beta": args.beta, "lr": args.lr, "K": args.K, "G": args.G, "use_lora": use_lora, "model_name": args.model_name})
+    # Lock seeds for reproducibility
+    torch.manual_seed(args.seed)
+    random.seed(args.seed)
+    np.random.seed(args.seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(args.seed)
 
-    print(f"Initializing SelfPlay Agent (use_lora={use_lora}) with {args.model_name}...")
+    wandb.init(project="anchored_code_self_play", name=args.run_name,
+               config={"beta": args.beta, "lr": args.lr, "K": args.K, "G": args.G, "use_lora": use_lora, "model_name": args.model_name, "seed": args.seed})
+
+    print(f"Initializing SelfPlay Agent (use_lora={use_lora}) with {args.model_name} (Seed {args.seed})...")
     agent = SelfPlayCodeAgent(model_name=args.model_name, use_lora=use_lora)
 
     # --- PHASE 0: Baseline Evaluation ---
