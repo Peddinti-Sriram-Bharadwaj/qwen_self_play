@@ -171,10 +171,10 @@ def compute_spectral_gdi(H_base, H_rl):
     except:
         return 0.0
 
-# ============================================================
-# MAIN ORCHESTRATION
-# ============================================================
-def run_unified(base_model_path, rl_checkpoints_dir):
+# =========================================================================================
+# MAIN
+# =========================================================================================
+def run_unified(base_model_path, rl_checkpoints_dir, run_label=None):
     print(f"\n[{'='*50}]")
     print(" UNIFIED SAHOO DIAGNOSTICS")
     print(f"[{'='*50}]\n")
@@ -251,8 +251,11 @@ def run_unified(base_model_path, rl_checkpoints_dir):
         mean_cka = np.mean([linear_cka(base_layer_reps[l], rl_layer_reps[l]) for l in layers_to_probe])
         mean_spectral = np.mean([compute_spectral_gdi(base_layer_reps[l], rl_layer_reps[l]) for l in layers_to_probe])
         
+        base_label = step_name.replace("_self_play", "")
+        final_label = f"[{run_label}] {base_label}" if run_label else base_label
+        
         results.append({
-            "label": step_name.replace("_self_play", ""),
+            "label": final_label,
             "auc": rl_auc, "conf": rl_conf, "entropy": rl_entropy, "len": rl_len,
             "hack": rl_hack, "disagree": rl_disagree, "gdi_wt": mean_wt_gdi, 
             "cka": mean_cka, "spectral": mean_spectral
@@ -274,6 +277,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--base_model", type=str, default="Qwen/Qwen2.5-Coder-1.5B-Instruct") # Switched default to 1.5B since user wants more aggressive updates
     parser.add_argument("--rl_checkpoints_dir", type=str, required=True)
+    parser.add_argument("--run_label", type=str, default=None, help="Optional label to prepend to checkpoint names in the table")
     args = parser.parse_args()
     
-    run_unified(args.base_model, args.rl_checkpoints_dir)
+    run_unified(args.base_model, args.rl_checkpoints_dir, args.run_label)

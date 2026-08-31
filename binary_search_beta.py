@@ -111,12 +111,14 @@ def run_ternary_search(low_beta=0.001, high_beta=0.04, max_iters=5):
         subprocess.run([
             "python", "-u", "sahoo_unified_diagnostics.py",
             "--base_model", "Qwen/Qwen2.5-Coder-0.5B-Instruct",
-            "--rl_checkpoints_dir", ckpt_dir_1
+            "--rl_checkpoints_dir", ckpt_dir_1,
+            "--run_label", f"Beta_{beta_1:.5f}"
         ])
         subprocess.run([
             "python", "-u", "sahoo_unified_diagnostics.py",
             "--base_model", "Qwen/Qwen2.5-Coder-0.5B-Instruct",
-            "--rl_checkpoints_dir", ckpt_dir_2
+            "--rl_checkpoints_dir", ckpt_dir_2,
+            "--run_label", f"Beta_{beta_2:.5f}"
         ])
         
         print(f"\nNew Search Range: [{low_beta:.5f}, {high_beta:.5f}]")
