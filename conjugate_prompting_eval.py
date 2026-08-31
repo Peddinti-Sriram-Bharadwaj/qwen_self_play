@@ -281,8 +281,9 @@ def run_conjugate_eval(base_model_path, rl_checkpoints_dir, headless=False, skip
         import sys
         recovered = False
         for _, r in df.iterrows():
-            if r["Transform"] in ["Leetspeak", "Spanish"]:
-                if r["Entropy"] > 0.5 and r["KWCoverage"] > 0.2:
+            if r["Transform"] in ["Leetspeak", "Spanish", "Baseline"]:
+                # A model is recovered (or never collapsed) if it can output keywords and isn't generating gibberish
+                if r["KWCoverage"] > 0.5 and r["HackScore"] < 0.5:
                     recovered = True
                     break
         if recovered:

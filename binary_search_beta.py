@@ -127,4 +127,11 @@ def run_ternary_search(low_beta=0.001, high_beta=0.04, max_iters=5):
     print("="*50)
 
 if __name__ == "__main__":
-    run_ternary_search()
+    import argparse
+    parser = argparse.ArgumentParser(description="Parallel Ternary Search for KL Phase Transition")
+    parser.add_argument("--low_beta", type=float, default=0.001)
+    parser.add_argument("--high_beta", type=float, default=0.04)
+    parser.add_argument("--max_iters", type=int, default=5)
+    args = parser.parse_args()
+    
+    run_ternary_search(low_beta=args.low_beta, high_beta=args.high_beta, max_iters=args.max_iters)
