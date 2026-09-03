@@ -39,18 +39,26 @@ def run_true_conjugate_eval(checkpoints_dir, dataset_path):
         print(f"{'*'*60}\n")
         
         print(f"Loading Model from {checkpoint_path}...")
-        
         # Check if it's a LoRA adapter or a Full Model
         is_peft = os.path.exists(os.path.join(checkpoint_path, "adapter_model.safetensors")) or \
-                  os.path.exists(os.path.join(checkpoint_path, "adapter_model.bin"))
+                  os.path.exists(os.path.join(checkpoint_path, "adapter_model.bin")) or \
+                  os.path.exists(os.path.join(checkpoint_path, "adapter_config.json"))
                   
         if is_peft:
             print(f"  -> Detected LoRA adapter. Loading base model Qwen/Qwen2.5-Coder-0.5B-Instruct first...")
             agent = SelfPlayCodeAgent(model_name="Qwen/Qwen2.5-Coder-0.5B-Instruct", use_lora=True)
-            agent.model.load_adapter(checkpoint_path, adapter_name="self_play")
+            try:
+                agent.model.load_adapter(checkpoint_path, adapter_name="self_play")
+            except Exception as e:
+                print(f"  [ERROR] Failed to load adapter from {checkpoint_path}: {e}")
+                continue
         else:
             print(f"  -> Detected Full Model checkpoint.")
-            agent = SelfPlayCodeAgent(model_name=checkpoint_path, use_lora=False)
+            try:
+                agent = SelfPlayCodeAgent(model_name=checkpoint_path, use_lora=False)
+            except Exception as e:
+                print(f"  [ERROR] Failed to load Full Model from {checkpoint_path}: {e}")
+                continue
         
         results = {}
 
