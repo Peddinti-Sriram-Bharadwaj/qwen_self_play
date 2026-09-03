@@ -3,12 +3,15 @@ import argparse
 import os
 import glob
 import torch
+from transformers import AutoTokenizer
 
 from code_agent import SelfPlayCodeAgent
 from parsing import extract_python_code
 from sandbox import evaluate_code
 from prompts import FIX_PROMPT, SYSTEM_MSG
 from conjugate_prompting_eval import TRANSFORMS
+
+BASE_MODEL = "Qwen/Qwen2.5-Coder-0.5B-Instruct"
 
 def run_true_conjugate_eval(checkpoints_dir, dataset_path):
     print(f"\n[{'='*60}]")
@@ -45,8 +48,8 @@ def run_true_conjugate_eval(checkpoints_dir, dataset_path):
                   os.path.exists(os.path.join(checkpoint_path, "adapter_config.json"))
                   
         if is_peft:
-            print(f"  -> Detected LoRA adapter. Loading base model Qwen/Qwen2.5-Coder-0.5B-Instruct first...")
-            agent = SelfPlayCodeAgent(model_name="Qwen/Qwen2.5-Coder-0.5B-Instruct", use_lora=True)
+            print(f"  -> Detected LoRA adapter. Loading base model {BASE_MODEL} first...")
+            agent = SelfPlayCodeAgent(model_name=BASE_MODEL, use_lora=True)
             try:
                 agent.model.load_adapter(checkpoint_path, adapter_name="self_play")
             except Exception as e:
@@ -59,6 +62,14 @@ def run_true_conjugate_eval(checkpoints_dir, dataset_path):
             except Exception as e:
                 print(f"  [ERROR] Failed to load Full Model from {checkpoint_path}: {e}")
                 continue
+        
+        # Checkpoints only save model weights, not the tokenizer.
+        # Always reload the tokenizer from the base model to ensure the chat template is available.
+        print(f"  -> Reloading tokenizer from {BASE_MODEL} to restore chat template...")
+        agent.tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL)
+        if agent.tokenizer.pad_token is None:
+            agent.tokenizer.pad_token = agent.tokenizer.eos_token
+        agent.tokenizer.padding_side = "left"
         
         results = {}
 
